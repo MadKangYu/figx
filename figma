@@ -200,6 +200,16 @@ cmd_files() {
     set)     files_set "$@" ;;
     open)    files_open "$@" ;;
     verify)  files_verify "$@" ;;
+    team)
+      local tsub="${1:-list}"; shift || true
+      case "$tsub" in
+        set)     _config_set default_team_id "$1"; echo "✓ default team id: $1" ;;
+        current) _config_get default_team_id ;;
+        open)    team_open "$@" ;;
+        new-project) team_new_project "$@" ;;
+        *) die "files team: unknown subcommand '$tsub' (set|current|open|new-project)" ;;
+      esac
+      ;;
     *) die "files: unknown subcommand '$sub'" ;;
   esac
 }
@@ -223,6 +233,58 @@ files_open() {
   sleep 3
   plugin_open
   hermes_notify "figx: opened file $key + plugin dispatched" || true
+}
+
+team_open() {
+  local team_id="${1:-$(_config_get default_team_id 2>/dev/null)}"
+  [ -n "$team_id" ] || die "no team id — run: figx files team set <id> (from figma.com/files/team/<id>/...)"
+  echo "→ opening team $team_id in Figma Desktop"
+  open "figma://team/$team_id"
+  hermes_notify "figx: opened team $team_id" || true
+}
+
+team_new_project() {
+  # Best-effort AppleScript to click the "+ New project" / "+ 새로 만들기"
+  # control in the Figma Desktop sidebar. Figma is Electron, so many
+  # controls are canvas-drawn and not AX-accessible. If clicking fails,
+  # we fall through to keystroke the standard Figma shortcut for New
+  # project (currently unbound; we emit a clear diagnostic instead).
+  local project_name="${1:-New Project}"
+  local team_id="${2:-$(_config_get default_team_id 2>/dev/null)}"
+  [ -n "$team_id" ] && open "figma://team/$team_id"
+  sleep 1.5
+  osascript <<APPLESCRIPT
+tell application "Figma" to activate
+delay 0.5
+tell application "System Events"
+  tell process "Figma"
+    -- File menu → New project…  (available when a team is selected)
+    try
+      tell menu bar item "File" of menu bar 1
+        click
+        delay 0.3
+        tell menu 1
+          if (name of every menu item) contains "New project…" then
+            click menu item "New project…"
+          else if (name of every menu item) contains "새 프로젝트…" then
+            click menu item "새 프로젝트…"
+          else
+            error "No 'New project' menu item visible (team not selected?)"
+          end if
+        end tell
+      end tell
+      delay 0.7
+      keystroke "$project_name"
+      delay 0.2
+      key code 36
+      return "✓ new project '$project_name' dispatched"
+    on error e
+      error "Figma UI didn't expose New project: " & e
+    end try
+  end tell
+end tell
+APPLESCRIPT
+  hermes_notify "figx: new project '$project_name' dispatched" || true
 }
 
 files_verify() {
