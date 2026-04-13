@@ -81,10 +81,9 @@ WebSocket is open but the Figma Desktop plugin hasn't handshaken yet.
 The plugin needs to be actively running in Figma — `figx plugin open`
 re-clicks the menu item.
 
-## Known issues from the build session (2026-04-13)
+## Common setup pitfalls (universal)
 
-These are real errors hit while building figx v0.1.0. Each has a
-verified fix.
+These are recurring issues across setups. Each has a verified fix.
 
 ### 1. `unknown command 'auth'` when running `figma auth login`
 
@@ -94,9 +93,10 @@ binary to **`figx`**; symlinked at `~/.local/bin/figx`. Never call
 
 ### 2. `403 Invalid scope(s): file_variables:read`
 
-The PAT was issued from a Professional account; the Variables scopes
-only show up on Enterprise seats. Switched to the Tokens Studio plugin
-path; `tokens.studio.json` is the payload.
+The Variables REST scopes only appear in the PAT generation UI on
+Enterprise plans. On Professional/Organization, switch to the Tokens
+Studio plugin path — `figx export tokens` produces a
+`tokens.studio.json` the plugin imports directly.
 
 ### 3. `plugin not connected` from figma-mcp-go MCP calls
 
@@ -109,10 +109,12 @@ resolves it.
 In Dev Mode the ⌘/ palette is a different surface. Use the explicit
 menu traversal — that's exactly what `figx plugin open` does.
 
-### 5. AppleScript failed silently
+### 5. AppleScript failed silently across Figma locales
 
-Locale: Korean Figma menu, English script. Fix: iterate a locale-name
-set (`Plugins / 플러그인 / プラグイン / 插件`). Works in every language.
+When Figma Desktop is installed in a non-English locale, English menu
+names don't match. figx's plugin automation iterates a locale-name set
+(`Plugins / 플러그인 / プラグイン / 插件`), so it works in every
+supported language.
 
 ### 6. `SSL: CERTIFICATE_VERIFY_FAILED` on excalidraw upload
 

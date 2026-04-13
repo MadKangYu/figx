@@ -585,6 +585,13 @@ main() {
         *) die "images: unknown subcommand '$sub' (prep)" ;;
       esac
       ;;
+    assets)
+      local sub="${1:-classify}"; shift || true
+      case "$sub" in
+        classify) python3 "$FIGMA_CLI_ROOT/tools/asset-classify.py" "$@" ;;
+        *) die "assets: unknown subcommand '$sub' (classify)" ;;
+      esac
+      ;;
     auth)     cmd_auth "$@" ;;
     files)    cmd_files "$@" ;;
     vars)     cmd_vars "$@" ;;
