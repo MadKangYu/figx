@@ -16,7 +16,6 @@ Work-around — use the plugin path instead of REST:
 ```bash
 figx export tokens --fmt dtcg  --out tokens.dtcg.json
 figx export tokens --fmt css   --out tokens.css
-# And, from your token pipeline:
 python3 tools/extract_from_py.py --src <your_source.py> --out <out_dir>
 ```
 
@@ -44,6 +43,25 @@ macOS blocks `System Events` until your terminal is approved:
 2. Add Terminal (or iTerm / Ghostty / VS Code) and toggle **on**
 3. Re-run `figx plugin open`
 
+## `Can't call "createVariableCollection" in read-only mode`
+
+Plugin was initialised while the file was in **Dev Mode**. Figma's
+plugin runtime snapshots `figma.editorType` at load time and ignores
+later toggles. Relaunching the plugin alone is not enough — the
+Desktop process holds the state.
+
+**Fix**:
+
+1. In Figma Desktop, switch the file to Design Mode (보기 → Design으로
+   전환, shortcut ⇧D, or top-right `</>` icon).
+2. Fully quit Figma Desktop (⌘Q).
+3. Reopen the file via `figx files open <key>`.
+4. Immediately launch the plugin: `figx plugin open`.
+5. Retry the write operation.
+
+Official reference: Figma Plugin API docs on `editorType` and Dev Mode
+constraints — https://www.figma.com/plugin-docs/manifest/
+
 ## `Quick Actions` (⌘/) doesn't find the plugin
 
 In Dev Mode the ⌘/ palette is a different surface — it lists dev
@@ -51,17 +69,19 @@ actions, not plugins. Use the explicit menu path or `figx plugin open`.
 
 ## Dev Mode vs Design Mode confusion
 
-|                 | Design Mode                  | Dev Mode                           |
-| --------------- | ---------------------------- | ---------------------------------- |
-| Purpose         | editing, compositing         | handoff / code inspection          |
-| Right sidebar   | Design / Prototype / Inspect | Code / Inspect / Annotations       |
-| ⌘/ palette      | includes Plugins             | dev-only (no plugins)              |
-| Variables panel | full edit                    | read-only                          |
-| Plugins submenu | fully visible                | visible, but some plugins disabled |
-| Toggle          | top-right `</>` icon         | same icon                          |
+|                   | Design Mode                  | Dev Mode                                 |
+| ----------------- | ---------------------------- | ---------------------------------------- |
+| Purpose           | editing, compositing         | handoff / code inspection                |
+| Right sidebar     | Design / Prototype / Inspect | Code / Inspect / Annotations             |
+| ⌘/ palette        | includes Plugins             | dev-only (no plugins)                    |
+| Variables panel   | full edit                    | read-only                                |
+| Plugins submenu   | fully visible                | visible, but some plugins disabled       |
+| **Plugin writes** | allowed                      | **blocked — `figma.editorType==='dev'`** |
+| Toggle            | top-right `</>` icon         | same icon                                |
 
 If a command works in one mode but not the other, toggle the top-right
-`</>` icon. `figx plugin open` works in both.
+`</>` icon. `figx plugin open` works in both **read-only** contexts,
+but **writes require Design Mode + full Figma restart** (see above).
 
 ## `429 rate limited`
 
@@ -80,6 +100,15 @@ it consistently, reduce concurrency — don't spawn more than one
 WebSocket is open but the Figma Desktop plugin hasn't handshaken yet.
 The plugin needs to be actively running in Figma — `figx plugin open`
 re-clicks the menu item.
+
+## Reset everything
+
+```bash
+figx auth logout
+rm -f ~/.config/figma/cli.toml
+rm -f ~/.local/state/figma-cli/events.log
+figx doctor
+```
 
 ## Common setup pitfalls (universal)
 
@@ -107,7 +136,7 @@ resolves it.
 ### 4. Quick Actions (⌘/) couldn't find the plugin
 
 In Dev Mode the ⌘/ palette is a different surface. Use the explicit
-menu traversal — that's exactly what `figx plugin open` does.
+menu path or `figx plugin open`.
 
 ### 5. AppleScript failed silently across Figma locales
 
@@ -138,11 +167,21 @@ to your `.zshrc`.
 Plugin imported but Figma hadn't indexed yet. Close and reopen the
 file; the plugin will appear under `Plugins → Development`.
 
-## Reset everything
+### 10. Variable / Rectangle / anything write → "read-only mode"
 
-```bash
-figx auth logout
-rm -f ~/.config/figma/cli.toml
-rm -f ~/.local/state/figma-cli/events.log
-figx doctor
-```
+Full Desktop restart required. Background: Figma plugins snapshot
+`figma.editorType` at load; Dev Mode loads mean permanent read-only
+for that plugin session. ⌘Q Figma → reopen file → switch to Design
+Mode → launch plugin.
+
+## Policy
+
+Whenever an error repeats more than twice, **stop and check official
+documentation** before trying variations. Training data on plugin APIs
+goes stale — platform-enforced rules (editor modes, PAT scopes, rate
+limits) ship quarterly. Sources:
+
+- Figma Plugin API — https://www.figma.com/plugin-docs/
+- Figma REST API — https://developers.figma.com/docs/rest-api/
+- Figma Plugin Manifest — https://www.figma.com/plugin-docs/manifest/
+- figma-mcp-go issues — https://github.com/vkhanhqui/figma-mcp-go/issues
