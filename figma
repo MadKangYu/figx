@@ -502,12 +502,14 @@ files_verify() {
   echo "  your role:  $role"
   # Drafts detection: when the endpoint doesn't carry a team/project id
   # the file is personal — Variables multi-mode features are disabled.
-  local has_team; has_team="$(echo "$meta" | jq -r '.file.team_id // .team_id // "none"')"
-  if [ "$has_team" = "none" ] || [ -z "$has_team" ]; then
+  # Figma REST returns team_id=null for Professional files; use folder_name
+  # as the reliable signal. Drafts files have folder_name=null or "Drafts".
+  local folder; folder="$(echo "$meta" | jq -r '.file.folder_name // .folder_name // ""')"
+  if [ -z "$folder" ] || [ "$folder" = "null" ] || [ "$folder" = "Drafts" ]; then
     echo "  ⚠ appears to be a personal Drafts file — move it into a paid team project"
     echo "     otherwise Variables multi-mode (Pep/Cer) and Tokens Studio push may fail."
   else
-    echo "  ✓ team-scoped file (id: $has_team)"
+    echo "  ✓ team-scoped file (project/folder: $folder)"
   fi
   hermes_notify "figx: verified file $key (team=$has_team)" || true
 }
