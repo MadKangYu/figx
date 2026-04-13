@@ -68,6 +68,40 @@ Same `~/.mcp.json` as Claude Code.
 figx plugin register-mcp all
 ```
 
+## Supabase
+
+Optional but handy for teams without Enterprise Figma. The pattern:
+
+- Keep the **authoritative tokens** in a Supabase table
+  (`tokens (id, key, value, type, mode)`).
+- A Supabase Edge Function serves them as both JSON (for CI) and
+  CSS (for runtime theming).
+- figx `export` feeds Supabase; Tokens Studio reads from Supabase
+  through its JSON URL support.
+
+```sql
+create table tokens (
+  id bigserial primary key,
+  key text not null,
+  mode text not null default 'default',
+  type text not null,
+  value jsonb not null,
+  updated_at timestamptz default now(),
+  unique (key, mode)
+);
+```
+
+Push from figx:
+
+```bash
+figx export tokens --fmt dtcg --out /tmp/tokens.dtcg.json
+psql "$SUPABASE_DB_URL" -c "\copy tokens(key, mode, type, value) from /tmp/tokens.csv csv"
+```
+
+Supabase MCP is already set up in `~/.codex/config.toml` here
+(`mcp_servers.supabase`), so any agent can read/write the table
+directly.
+
 ## Hermes-Agent
 
 Every figx command can push events. Register a webhook once, then use

@@ -253,6 +253,7 @@ copilot, vscode-figma-mcp-helper, and more — see
 - [Figma API reference](docs/FIGMA-API.md) — scopes, endpoints, rate limits
 - [Integrations](docs/INTEGRATIONS.md) — Vercel, v0, Claude Code, Codex, OpenCode, Hermes
 - [Automation](docs/AUTOMATION.md) — one-command docs sync
+- [Pro workflows](docs/PRO-WORKFLOWS.md) — how expert teams actually ship with Figma
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — common failure dictionary
 - [Risk register](docs/RISKS-FIGMA-MCP-GO.md) — predicted failure modes of upstream
 - [Is figx really a CLI?](docs/WHAT-IS-A-CLI.md) — yes, and why
