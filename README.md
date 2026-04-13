@@ -17,22 +17,22 @@
 
 ## What figx does (TL;DR)
 
-| If you need to…                                                            | Run                                                                            |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----- |
-| Set up everything on a fresh Mac, without thinking                         | `curl -fsSL https://raw.githubusercontent.com/MadKangYu/figx/main/bootstrap.sh | bash` |
-| Know if your environment is ready                                          | `figx doctor`                                                                  |
-| Audit macOS permissions (Accessibility / Automation / Keychain / outbound) | `figx permissions`                                                             |
-| Save a PAT safely (Keychain + `/v1/me` validation)                         | `figx auth login`                                                              |
-| Register `figma-mcp-go` to Claude Code + Codex + OpenCode at once          | `figx plugin register-mcp all`                                                 |
-| Import the Figma Desktop plugin **automatically** (no UI hunting)          | `figx plugin install`                                                          |
-| Launch the already-imported plugin via menu click                          | `figx plugin open`                                                             |
-| Extract tokens from Python code to DTCG / CSS / Tokens Studio JSON         | `figx export tokens --fmt dtcg`                                                |
-| Apply Variables to Figma (Enterprise)                                      | `figx vars apply tokens.json`                                                  |
-| Walk through the 7-step wizard                                             | `figx onboarding`                                                              |
-| Check for Figma Desktop updates                                            | `figx figma-update`                                                            |
-| Find / initialize a figx project folder                                    | `figx project find` · `figx project init`                                      |
-| Publish a library and poll for completion                                  | `figx publish`                                                                 |
-| Ping Hermes on anything                                                    | `figx hermes notify "…"`                                                       |
+| If you need to…                                                            | Run                                                                                     |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Set up everything on a fresh Mac, without thinking                         | `bash <(curl -fsSL https://raw.githubusercontent.com/MadKangYu/figx/main/bootstrap.sh)` |
+| Know if your environment is ready                                          | `figx doctor`                                                                           |
+| Audit macOS permissions (Accessibility / Automation / Keychain / outbound) | `figx permissions`                                                                      |
+| Save a PAT safely (Keychain + `/v1/me` validation)                         | `figx auth login`                                                                       |
+| Register `figma-mcp-go` to Claude Code + Codex + OpenCode at once          | `figx plugin register-mcp all`                                                          |
+| Import the Figma Desktop plugin **automatically** (no UI hunting)          | `figx plugin install`                                                                   |
+| Launch the already-imported plugin via menu click                          | `figx plugin open`                                                                      |
+| Extract tokens from Python code to DTCG / CSS / Tokens Studio JSON         | `figx export tokens --fmt dtcg`                                                         |
+| Apply Variables to Figma (Enterprise)                                      | `figx vars apply tokens.json`                                                           |
+| Walk through the 7-step wizard                                             | `figx onboarding`                                                                       |
+| Check for Figma Desktop updates                                            | `figx figma-update`                                                                     |
+| Find / initialize a figx project folder                                    | `figx project find` · `figx project init`                                               |
+| Publish a library and poll for completion                                  | `figx publish`                                                                          |
+| Ping Hermes on anything                                                    | `figx hermes notify "…"`                                                                |
 
 Each command is idempotent, has `--help`-style output on invalid input,
 and pushes a Hermes event (logged locally if Hermes isn't reachable).
