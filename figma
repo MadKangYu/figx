@@ -213,6 +213,35 @@ cmd_files() {
         *) die "files team: unknown subcommand '$tsub' (set|current|open|new-project)" ;;
       esac
       ;;
+    project)
+      local psub="${1:-list}"; shift || true
+      case "$psub" in
+        set)
+          local arg="${1:-}"; [ -n "$arg" ] || die "usage: figx files project set <id|url>"
+          local pid; pid="$(echo "$arg" | sed -n 's|.*/project/\([0-9]*\).*|\1|p')"
+          [ -z "$pid" ] && pid="$arg"
+          _config_set default_project_id "$pid"
+          echo "✓ default project id: $pid"
+          ;;
+        current) _config_get default_project_id ;;
+        list)
+          local pid; pid="$(_config_get default_project_id 2>/dev/null)"
+          [ -n "$pid" ] || die "no project id — run: figx files project set <id|url>"
+          api_get "/v1/projects/$pid/files" | jq -r '.files[] | "\(.key)\t\(.name)"'
+          ;;
+        open)
+          local name="${1:-}"; [ -n "$name" ] || die "usage: figx files project open \"<file name>\""
+          local pid; pid="$(_config_get default_project_id 2>/dev/null)"
+          [ -n "$pid" ] || die "no project id"
+          local key; key="$(api_get "/v1/projects/$pid/files" | jq -r --arg n "$name" '.files[] | select(.name | test($n; "i")) | .key' | head -1)"
+          [ -n "$key" ] || die "file '$name' not found in project $pid"
+          echo "→ opening $name ($key)"
+          files_set "$key" >/dev/null
+          files_open "$key"
+          ;;
+        *) die "files project: unknown subcommand '$psub' (set|current|list|open)" ;;
+      esac
+      ;;
     *) die "files: unknown subcommand '$sub'" ;;
   esac
 }
