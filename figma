@@ -190,42 +190,65 @@ plugin_run() {
 
 plugin_open() {
   # Launch the already-imported figma-mcp-go plugin inside Figma Desktop.
-  # Uses deterministic menu traversal (locale-independent positional navigation
-  # via AppleScript System Events). Quick Actions / command palette is unreliable
-  # across locales, so we navigate the 플러그인/Plugins menu directly.
+  # Locale-aware deterministic menu traversal via AppleScript System Events.
+  # Handles: Plugins/플러그인/プラグイン/插件, Development/개발/開発/开发.
   if ! pgrep -x Figma >/dev/null 2>&1; then
     die "Figma Desktop not running — open the target file first"
   fi
-  osascript <<'APPLESCRIPT' || die "menu click failed (check Accessibility permission for Terminal/iTerm)"
+  local plugin_name="${FIGX_PLUGIN_NAME:-Figma MCP Go}"
+  FIGX_PLUGIN_NAME_EXPORT="$plugin_name" osascript <<'APPLESCRIPT' || die "menu click failed (check Accessibility permission for Terminal/iTerm)"
+set pluginName to system attribute "FIGX_PLUGIN_NAME_EXPORT"
+if pluginName is "" then set pluginName to "Figma MCP Go"
+
+-- Locale candidates. Keep English first for the common case.
+set pluginMenuNames to {"Plugins", "플러그인", "プラグイン", "插件", "Plugins & widgets"}
+set devMenuNames to {"Development", "개발", "開発", "开发", "개발용", "Dev"}
+
 tell application "Figma" to activate
 delay 0.4
+
 tell application "System Events"
   tell process "Figma"
-    set menuNames to name of every menu bar item of menu bar 1
+    set topNames to name of every menu bar item of menu bar 1
+
+    -- Locate plugin menu
     set pluginMenu to missing value
-    repeat with n in menuNames
-      if (n as text) is "Plugins" or (n as text) is "플러그인" then
-        set pluginMenu to menu bar item (n as text) of menu bar 1
+    repeat with cand in pluginMenuNames
+      if topNames contains (cand as text) then
+        set pluginMenu to menu bar item (cand as text) of menu bar 1
         exit repeat
       end if
     end repeat
-    if pluginMenu is missing value then error "Plugins menu not found"
+    if pluginMenu is missing value then
+      error "Plugins menu not found — top bar has: " & (topNames as text)
+    end if
+
     click pluginMenu
     delay 0.3
+
+    -- Locate Development submenu
+    set devItem to missing value
     tell menu 1 of pluginMenu
-      set devItem to missing value
-      repeat with mi in (menu items)
-        if (name of mi) is "Development" or (name of mi) is "개발" then
-          set devItem to mi
+      set subNames to name of every menu item
+      repeat with cand in devMenuNames
+        if subNames contains (cand as text) then
+          set devItem to menu item (cand as text)
           exit repeat
         end if
       end repeat
-      if devItem is missing value then error "Development submenu not found"
-      click devItem
-      delay 0.3
-      tell menu 1 of devItem
-        click menu item "Figma MCP Go"
-      end tell
+    end tell
+    if devItem is missing value then error "Development submenu not found"
+
+    click devItem
+    delay 0.3
+
+    -- Click the plugin
+    tell menu 1 of devItem
+      if (name of every menu item) contains pluginName then
+        click menu item pluginName
+      else
+        error "Plugin '" & pluginName & "' not in Development submenu"
+      end if
     end tell
   end tell
 end tell
