@@ -247,9 +247,14 @@ copilot, vscode-figma-mcp-helper, and more — see
 ## Docs
 
 - [Setup](docs/SETUP.md) — from zero to first publish
-- [CLI reference](docs/CLI.md) — every subcommand
+- [Web setup](docs/WEB-SETUP.md) — accounts, PAT, browser-only steps
+- [Figma Marketplace plugins](docs/FIGMA-MARKETPLACE.md) — what to install inside Figma after you have the app
+- [Essential Figma plugins](docs/ESSENTIAL-PLUGINS.md) — curated GitHub-hosted plugins
+- [Figma API reference](docs/FIGMA-API.md) — scopes, endpoints, rate limits
+- [Integrations](docs/INTEGRATIONS.md) — Vercel, v0, Claude Code, Codex, OpenCode, Hermes
+- [Automation](docs/AUTOMATION.md) — one-command docs sync
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — common failure dictionary
-- [Essential Figma plugins](docs/ESSENTIAL-PLUGINS.md) — curated list
+- [Risk register](docs/RISKS-FIGMA-MCP-GO.md) — predicted failure modes of upstream
 - [Is figx really a CLI?](docs/WHAT-IS-A-CLI.md) — yes, and why
 
 ## License
