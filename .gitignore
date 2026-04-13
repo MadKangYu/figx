@@ -1,0 +1,28 @@
+# State / logs
+events.log
+*.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Generated tokens (project-specific, keep out of the CLI repo)
+tokens/*.json
+!tokens/example.json
+
+# Local secrets (we use Keychain; never commit)
+.env
+.env.local
+*.pat

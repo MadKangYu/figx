@@ -1,0 +1,312 @@
+#!/usr/bin/env bash
+# figma — lightweight CLI for the Figma REST API + figma-mcp-go plugin bridge
+# Version: 0.1.0
+# Auth: macOS Keychain (service=figma-cli) with FIGMA_PAT env-var fallback
+# Notifications: Hermes-Agent; falls back to $HOME/.local/state/figma-cli/events.log
+#
+# Subcommands:
+#   auth {login|status|logout}
+#   files {list|find <pattern>|current|set <key>}
+#   vars  {get|apply <tokens.json>|dump <out.json>}
+#   publish [--file <key>]           # Prints instructions (REST has no publish endpoint)
+#   devmode [--file <key>]            # Inspects dev resources + meta
+#   plugin {install|open|run|status}  # figma-mcp-go plugin management
+#     open: click Figma Desktop menu Plugins→Development→Figma MCP Go (AppleScript)
+#   hermes {check|notify <msg>}       # Hermes sanity + ad-hoc notify
+#   export tokens [--fmt dtcg|css] [--out <file>]
+#   doctor                            # Environment self-check
+#
+# Failure policy: never leave orphaned state. Every command exits non-zero on
+# the first real error. Every action emits a Hermes event (best-effort).
+
+set -Eeuo pipefail
+
+VERSION="0.1.0"
+FIGMA_CLI_ROOT="$HOME/scripts/figma-cli"
+FIGMA_CLI_LIB="$FIGMA_CLI_ROOT/lib"
+FIGMA_CLI_CONFIG="$HOME/.config/figma/cli.toml"
+FIGMA_CLI_STATE_DIR="$HOME/.local/state/figma-cli"
+FIGMA_CLI_EVENT_LOG="$FIGMA_CLI_STATE_DIR/events.log"
+
+mkdir -p "$(dirname "$FIGMA_CLI_CONFIG")" "$FIGMA_CLI_STATE_DIR"
+
+# Source libraries (each library is self-contained; fail gracefully if missing)
+for lib in api keychain hermes files vars onboarding; do
+  if [ -f "$FIGMA_CLI_LIB/$lib.sh" ]; then
+    # shellcheck disable=SC1090
+    . "$FIGMA_CLI_LIB/$lib.sh"
+  else
+    echo "warn: lib/$lib.sh missing — some commands may fail" >&2
+  fi
+done
+
+log_event() {
+  local level="$1"; shift
+  local msg="$*"
+  printf '[%s] %s %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$level" "$msg" \
+    >>"$FIGMA_CLI_EVENT_LOG"
+}
+
+die() {
+  log_event ERROR "$*"
+  echo "error: $*" >&2
+  hermes_notify "figma-cli ERROR: $*" || true
+  exit 1
+}
+
+need() {
+  command -v "$1" >/dev/null 2>&1 || die "missing dependency: $1"
+}
+
+# Trap uncaught errors so nothing is ever silently dropped
+on_err() {
+  local code=$?
+  log_event ERROR "uncaught exit=$code cmd='$BASH_COMMAND'"
+  hermes_notify "figma-cli UNCAUGHT exit=$code: $BASH_COMMAND" || true
+  exit "$code"
+}
+trap on_err ERR
+
+cmd_version() {
+  echo "figma-cli $VERSION"
+  echo "config:  $FIGMA_CLI_CONFIG"
+  echo "events:  $FIGMA_CLI_EVENT_LOG"
+}
+
+cmd_doctor() {
+  local ok=1
+  echo "→ figma-cli doctor"
+  for bin in curl jq security gh; do
+    if command -v "$bin" >/dev/null 2>&1; then
+      echo "  ✓ $bin"
+    else
+      echo "  ✗ $bin (missing)"; ok=0
+    fi
+  done
+  if keychain_has_pat; then echo "  ✓ Keychain PAT"; else echo "  ○ Keychain PAT (not set; will use \$FIGMA_PAT if present)"; fi
+  if [ -n "${FIGMA_PAT:-}" ]; then echo "  ✓ \$FIGMA_PAT env var"; fi
+  if [ -f "$FIGMA_CLI_CONFIG" ]; then echo "  ✓ config: $FIGMA_CLI_CONFIG"; else echo "  ○ config not yet written"; fi
+  if command -v hermes >/dev/null 2>&1; then
+    echo "  ✓ hermes $(hermes --version 2>&1 | head -1)"
+  else
+    echo "  ○ hermes not on PATH (notifications will log to file only)"
+  fi
+  [ $ok -eq 1 ] || die "doctor found missing deps"
+}
+
+cmd_auth() {
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    login)    keychain_login ;;
+    status)   keychain_status ;;
+    logout)   keychain_logout ;;
+    *) die "auth: unknown subcommand '$sub'" ;;
+  esac
+}
+
+cmd_files() {
+  local sub="${1:-list}"; shift || true
+  case "$sub" in
+    list)    files_list "$@" ;;
+    find)    files_find "$@" ;;
+    current) files_current ;;
+    set)     files_set "$@" ;;
+    *) die "files: unknown subcommand '$sub'" ;;
+  esac
+}
+
+cmd_vars() {
+  local sub="${1:-get}"; shift || true
+  case "$sub" in
+    get)     vars_get "$@" ;;
+    apply)   vars_apply "$@" ;;
+    dump)    vars_dump "$@" ;;
+    *) die "vars: unknown subcommand '$sub'" ;;
+  esac
+}
+
+cmd_publish() {
+  local file_key; file_key="$(files_resolve_key "$@")"
+  echo "→ Publish is a manual step — the REST API does not expose a publish endpoint."
+  echo "  1. Open the file in Figma Desktop: https://www.figma.com/design/$file_key/"
+  echo "  2. Click the Assets panel → Publish library"
+  echo "  3. Confirm with a commit message"
+  hermes_notify "figma-cli: MANUAL publish required for file $file_key" || true
+  echo ""
+  echo "Waiting for published variables to appear (polling every 15s, Ctrl-C to stop)..."
+  local tries=0
+  while (( tries < 80 )); do
+    if api_get "/v1/files/$file_key/variables/published" | jq -e '.meta.variables | length > 0' >/dev/null 2>&1; then
+      echo "✓ Published variables detected"
+      hermes_notify "figma-cli: publish detected for $file_key" || true
+      return 0
+    fi
+    sleep 15; tries=$((tries+1))
+  done
+  die "publish polling timed out after 20 minutes"
+}
+
+cmd_devmode() {
+  local file_key; file_key="$(files_resolve_key "$@")"
+  echo "→ File metadata:"
+  api_get "/v1/files/$file_key/meta" | jq '{name, last_modified, editorType, role}' 2>/dev/null || true
+  echo ""
+  echo "→ Dev resources:"
+  api_get "/v1/files/$file_key/dev_resources" 2>/dev/null | jq '.dev_resources // empty' || echo "(none or insufficient scope)"
+}
+
+cmd_plugin() {
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    install) plugin_install "$@" ;;
+    open)    plugin_open "$@" ;;
+    run)     plugin_run "$@" ;;
+    status)  plugin_status ;;
+    *) die "plugin: unknown subcommand '$sub'" ;;
+  esac
+}
+
+plugin_install() {
+  local src="${1:-$HOME/Projects/figma-mcp-learning/plugins/figma-mcp-go/plugin}"
+  [ -f "$src/manifest.json" ] || die "manifest.json not found at $src"
+  echo "→ Figma dev plugin source ready: $src/manifest.json"
+  echo "  Import once in Figma Desktop:"
+  echo "  Plugins → Development → Import plugin from manifest → select:"
+  echo "  $src/manifest.json"
+  # Try the URL scheme (best-effort; Figma may or may not support it)
+  if command -v open >/dev/null 2>&1; then
+    open "figma://plugins/import?manifest=$src/manifest.json" 2>/dev/null || true
+  fi
+  hermes_notify "figma-cli: plugin install initiated ($src/manifest.json)" || true
+}
+
+plugin_run() {
+  # Start the MCP server on the default ws://127.0.0.1:1994
+  if ! command -v npx >/dev/null 2>&1; then die "npx not found"; fi
+  echo "→ Starting figma-mcp-go MCP server (ws://127.0.0.1:1994)"
+  echo "  Keep Figma Desktop open and run the Figma MCP Go plugin inside it."
+  npx -y @vkhanhqui/figma-mcp-go
+}
+
+plugin_open() {
+  # Launch the already-imported figma-mcp-go plugin inside Figma Desktop.
+  # Uses deterministic menu traversal (locale-independent positional navigation
+  # via AppleScript System Events). Quick Actions / command palette is unreliable
+  # across locales, so we navigate the 플러그인/Plugins menu directly.
+  if ! pgrep -x Figma >/dev/null 2>&1; then
+    die "Figma Desktop not running — open the target file first"
+  fi
+  osascript <<'APPLESCRIPT' || die "menu click failed (check Accessibility permission for Terminal/iTerm)"
+tell application "Figma" to activate
+delay 0.4
+tell application "System Events"
+  tell process "Figma"
+    set menuNames to name of every menu bar item of menu bar 1
+    set pluginMenu to missing value
+    repeat with n in menuNames
+      if (n as text) is "Plugins" or (n as text) is "플러그인" then
+        set pluginMenu to menu bar item (n as text) of menu bar 1
+        exit repeat
+      end if
+    end repeat
+    if pluginMenu is missing value then error "Plugins menu not found"
+    click pluginMenu
+    delay 0.3
+    tell menu 1 of pluginMenu
+      set devItem to missing value
+      repeat with mi in (menu items)
+        if (name of mi) is "Development" or (name of mi) is "개발" then
+          set devItem to mi
+          exit repeat
+        end if
+      end repeat
+      if devItem is missing value then error "Development submenu not found"
+      click devItem
+      delay 0.3
+      tell menu 1 of devItem
+        click menu item "Figma MCP Go"
+      end tell
+    end tell
+  end tell
+end tell
+APPLESCRIPT
+  echo "✓ Figma MCP Go dispatched"
+  sleep 1
+  if nc -z 127.0.0.1 1994 2>/dev/null; then
+    echo "✓ WS 1994 listening"
+  else
+    echo "○ WS not yet up — server may still be starting"
+  fi
+  hermes_notify "figx: Figma MCP Go plugin launched" || true
+}
+
+plugin_status() {
+  # Probe the websocket port
+  if command -v nc >/dev/null 2>&1; then
+    if nc -z 127.0.0.1 1994 2>/dev/null; then
+      echo "✓ figma-mcp-go WS up on 127.0.0.1:1994"
+    else
+      echo "○ figma-mcp-go WS not responding on 127.0.0.1:1994"
+    fi
+  fi
+  # Check installed manifest
+  local manifest="$HOME/Projects/figma-mcp-learning/plugins/figma-mcp-go/plugin/manifest.json"
+  [ -f "$manifest" ] && echo "✓ manifest: $manifest" || echo "○ manifest missing"
+}
+
+cmd_hermes() {
+  local sub="${1:-check}"; shift || true
+  case "$sub" in
+    check)  hermes_check ;;
+    notify) hermes_notify "$*" ;;
+    *) die "hermes: unknown subcommand '$sub'" ;;
+  esac
+}
+
+cmd_export() {
+  local kind="${1:-tokens}"; shift || true
+  [ "$kind" = "tokens" ] || die "export: only 'tokens' supported"
+  local fmt="dtcg" out=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --fmt) fmt="$2"; shift 2 ;;
+      --out) out="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  local file_key; file_key="$(files_resolve_key)"
+  local raw; raw="$(api_get "/v1/files/$file_key/variables/local")"
+  local json
+  case "$fmt" in
+    dtcg) json="$(echo "$raw" | jq '.meta')" ;;
+    css)  json="$(echo "$raw" | jq -r '
+      .meta.variables // {} | to_entries[] |
+      "--\(.value.name | gsub("/";"-") | ascii_downcase): \(.value.valuesByMode | to_entries[0].value | tostring);"
+    ')" ;;
+    *) die "export: unsupported --fmt '$fmt'" ;;
+  esac
+  if [ -n "$out" ]; then echo "$json" >"$out"; echo "→ wrote $out"; else echo "$json"; fi
+}
+
+main() {
+  need curl; need jq
+  local cmd="${1:-version}"; shift || true
+  case "$cmd" in
+    version|-v|--version) cmd_version ;;
+    doctor)   cmd_doctor ;;
+    onboarding|start|init) onboarding_run ;;
+    auth)     cmd_auth "$@" ;;
+    files)    cmd_files "$@" ;;
+    vars)     cmd_vars "$@" ;;
+    publish)  cmd_publish "$@" ;;
+    devmode)  cmd_devmode "$@" ;;
+    plugin)   cmd_plugin "$@" ;;
+    hermes)   cmd_hermes "$@" ;;
+    export)   cmd_export "$@" ;;
+    help|-h|--help)
+      sed -n '2,30p' "$0" ;;
+    *) die "unknown command '$cmd' — try 'figma help'" ;;
+  esac
+}
+
+main "$@"
