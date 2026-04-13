@@ -432,6 +432,53 @@ team_ensure_id() {
   _config_get default_team_id
 }
 
+mode_detect() {
+  # Determine whether the frontmost Figma Desktop window is in Dev Mode
+  # or Design Mode. Dev Mode toggles the top-right `</>` icon and adds
+  # "Code settings / MCP" panels on the right.
+  osascript <<'APPLESCRIPT' 2>/dev/null || echo "unknown"
+tell application "System Events"
+  tell process "Figma"
+    try
+      set wname to name of front window
+      -- "— Dev Mode" / "— 개발 모드" suffix indicates Dev Mode; otherwise Design Mode.
+      if wname contains "Dev Mode" or wname contains "개발 모드" then
+        return "dev"
+      else
+        return "design"
+      end if
+    on error
+      return "unknown"
+    end try
+  end tell
+end tell
+APPLESCRIPT
+}
+
+mode_set() {
+  # Toggle to the requested mode (dev|design). Uses the keyboard
+  # shortcut Shift+D which Figma bound to 'Toggle dev mode' (locale-
+  # independent).
+  local want="${1:-}"
+  [ -n "$want" ] || die "usage: figx files mode {dev|design}"
+  local current; current="$(mode_detect)"
+  if [ "$current" = "$want" ]; then
+    echo "✓ already in $want mode"
+    return 0
+  fi
+  osascript <<'APPLESCRIPT' >/dev/null 2>&1
+tell application "Figma" to activate
+delay 0.3
+tell application "System Events"
+  tell process "Figma"
+    keystroke "d" using {shift down}
+  end tell
+end tell
+APPLESCRIPT
+  sleep 0.5
+  echo "→ switched to $(mode_detect) mode"
+}
+
 files_verify() {
   # Verify the resolved file sits in a paid workspace, not free Drafts.
   # GET /v1/files/:key/meta returns role + document_id; from the team/project

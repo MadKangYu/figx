@@ -259,6 +259,7 @@ copilot, vscode-figma-mcp-helper, and more — see
 - [Asset pipeline](docs/ASSET-PIPELINE.md) — Drive → classify → Figma
 - [Filename convention](docs/FILENAME-CONVENTION.md) — 7-segment multi-brand scheme
 - [Workspace routing](docs/WORKSPACE-ROUTING.md) — keep work on the paid team, not Drafts
+- [Required settings](docs/REQUIRED-SETTINGS.md) — MECE checklist, the one-paragraph story
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — common failure dictionary
 - [Risk register](docs/RISKS-FIGMA-MCP-GO.md) — predicted failure modes of upstream
 - [Is figx really a CLI?](docs/WHAT-IS-A-CLI.md) — yes, and why

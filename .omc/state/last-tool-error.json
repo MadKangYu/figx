@@ -1,0 +1,7 @@
+{
+  "tool_name": "WebFetch",
+  "tool_input_preview": "{\"url\":\"https://help.figma.com/hc/en-us/articles/360039831374\",\"prompt\":\"List every mandatory setup step for a Figma Professional/Organization team workspace — security settings, SSO/SAML, file/librar...",
+  "error": "Request failed with status code 404",
+  "timestamp": "2026-04-13T12:28:45.797Z",
+  "retry_count": 1
+}
