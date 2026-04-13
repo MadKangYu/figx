@@ -319,21 +319,46 @@ plugin_register_mcp() {
     echo "✓ Codex CLI registered in $path"
   }
 
+  _reg_opencode() {
+    local path="${1:-$HOME/.config/opencode/opencode.json}"
+    [ -f "$path" ] || { echo "opencode config not found: $path" >&2; return 1; }
+    local tmp; tmp="$(mktemp)"
+    jq --arg name "$server_name" '
+      .mcp //= {} |
+      .mcp[$name] = {
+        "type": "local",
+        "command": ["npx", "-y", "@vkhanhqui/figma-mcp-go@latest"],
+        "enabled": true
+      }
+    ' "$path" >"$tmp" && mv "$tmp" "$path"
+    echo "✓ OpenCode (oh-my-openagent) registered in $path"
+  }
+
   case "$target" in
     auto)
       local acted=0
-      [ -f "$HOME/.mcp.json" ] || { _reg_claude "$HOME/.mcp.json"; acted=1; }
-      [ -f "$HOME/.mcp.json" ] && { _reg_claude "$HOME/.mcp.json"; acted=1; }
-      if [ -f "$HOME/.codex/config.toml" ] || [ -d "$HOME/.codex" ]; then
-        _reg_codex "$HOME/.codex/config.toml"; acted=1
+      _reg_claude "$HOME/.mcp.json" && acted=1
+      if [ -d "$HOME/.codex" ]; then
+        _reg_codex "$HOME/.codex/config.toml" && acted=1
       fi
-      [ "$acted" = 1 ] || die "no target config found — pass 'claude' or 'codex'"
+      if [ -f "$HOME/.config/opencode/opencode.json" ]; then
+        _reg_opencode "$HOME/.config/opencode/opencode.json" && acted=1
+      fi
+      [ "$acted" = 1 ] || die "no target config found — pass 'claude', 'codex', or 'opencode'"
       ;;
-    claude) _reg_claude "$HOME/.mcp.json" ;;
-    codex)  _reg_codex  "$HOME/.codex/config.toml" ;;
-    */*.json|/*.json|~/*.json|*.json) _reg_claude "$target" ;;
-    */*.toml|/*.toml|~/*.toml|*.toml) _reg_codex  "$target" ;;
-    *) die "unknown target '$target' (use: auto|claude|codex|<path>)" ;;
+    claude)   _reg_claude   "$HOME/.mcp.json" ;;
+    codex)    _reg_codex    "$HOME/.codex/config.toml" ;;
+    opencode) _reg_opencode "$HOME/.config/opencode/opencode.json" ;;
+    all)
+      _reg_claude "$HOME/.mcp.json"
+      [ -d "$HOME/.codex" ] && _reg_codex "$HOME/.codex/config.toml"
+      [ -f "$HOME/.config/opencode/opencode.json" ] && _reg_opencode "$HOME/.config/opencode/opencode.json"
+      ;;
+    *.toml) _reg_codex  "$target" ;;
+    *.json)
+      if [[ "$target" == *opencode* ]]; then _reg_opencode "$target"
+      else _reg_claude "$target"; fi ;;
+    *) die "unknown target '$target' (use: auto|all|claude|codex|opencode|<path>)" ;;
   esac
 
   echo "Restart the affected agent (Claude Code / Cursor / VS Code / Codex) to pick up the change."
@@ -470,6 +495,15 @@ main() {
     version|-v|--version) cmd_version ;;
     doctor)   cmd_doctor ;;
     permissions|perms) cmd_permissions ;;
+    figma-update|app-update) figma_update ;;
+    project)
+      local sub="${1:-find}"; shift || true
+      case "$sub" in
+        find) project_find ;;
+        init) project_init "$@" ;;
+        *) die "project: unknown subcommand '$sub' (find|init)" ;;
+      esac
+      ;;
     onboarding|start|init) onboarding_run ;;
     auth)     cmd_auth "$@" ;;
     files)    cmd_files "$@" ;;
