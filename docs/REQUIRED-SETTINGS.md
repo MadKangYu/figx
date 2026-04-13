@@ -9,12 +9,13 @@ Sources: help.figma.com, developers.figma.com, direct UI verification.
 
 ## A. Account
 
-| #   | Setting               | Where                     | Required value                              | Why                                      |
-| --- | --------------------- | ------------------------- | ------------------------------------------- | ---------------------------------------- |
-| A1  | Plan                  | Settings → Plans          | **Professional or higher**                  | Multi-mode Variables, library publishing |
-| A2  | Account email         | Settings → Profile        | matches your work/team email                | Team seat assignment                     |
-| A3  | Two-factor auth       | Settings → Security       | **Enabled**                                 | Protects PAT creation                    |
-| A4  | Personal Access Token | Settings → Security → PAT | **Issued, ≤90 days** with scopes figx needs | API auth for figx                        |
+| #   | Setting               | Where                               | Required value                                                    | Why                                                                                                                                           |
+| --- | --------------------- | ----------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1  | Plan                  | Settings → Plans                    | **Professional or higher**                                        | Multi-mode Variables, library publishing                                                                                                      |
+| A2  | Account email         | Settings → Profile                  | matches your work/team email                                      | Team seat assignment                                                                                                                          |
+| A3  | Two-factor auth       | Settings → Security                 | **Enabled**                                                       | Protects PAT creation                                                                                                                         |
+| A4  | Personal Access Token | Settings → Security → PAT           | **Issued, ≤90 days** with scopes figx needs                       | API auth for figx                                                                                                                             |
+| A5  | AI credit balance     | Figma 메뉴 → AI 밸런스 / AI Balance | Monitor **monthly credits** (Professional pool, e.g. 3,000/month) | Figma AI generation features draw from this pool; exhausting it blocks AI-assisted renames, generate-variables, `generate_figma_design`, etc. |
 
 ## B. Team
 
