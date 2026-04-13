@@ -206,7 +206,9 @@ cmd_files() {
         set)     _config_set default_team_id "$1"; echo "✓ default team id: $1" ;;
         current) _config_get default_team_id ;;
         open)    team_open "$@" ;;
-        detect)  team_detect ;;
+        detect)     team_detect ;;
+        autodetect) team_autodetect ;;
+        ensure-id)  team_ensure_id ;;
         new-project|create-project) team_new_project "$@" ;;
         *) die "files team: unknown subcommand '$tsub' (set|current|open|new-project)" ;;
       esac
@@ -237,8 +239,9 @@ files_open() {
 }
 
 team_open() {
-  local team_id="${1:-$(_config_get default_team_id 2>/dev/null)}"
-  [ -n "$team_id" ] || die "no team id — run: figx files team set <id> (from figma.com/files/team/<id>/...)"
+  local team_id="${1:-}"
+  [ -n "$team_id" ] || team_id="$(team_ensure_id)"
+  [ -n "$team_id" ] || die "no team id available"
   echo "→ opening team $team_id in Figma Desktop"
   open "figma://team/$team_id"
   hermes_notify "figx: opened team $team_id" || true
@@ -333,6 +336,71 @@ tell application "System Events"
   end tell
 end tell
 APPLESCRIPT
+}
+
+team_autodetect() {
+  # Recover the team id via the clipboard. Flow:
+  # 1. Ensure Figma Desktop is frontmost on the team home.
+  # 2. Trigger Edit → Copy Link or the team URL copy via AppleScript.
+  # 3. Read pbpaste, extract /team/<id>/ from figma.com URL, save config.
+  # Gracefully falls back to asking the user to paste the URL.
+  echo "→ trying to capture current team URL via clipboard"
+  local before; before="$(pbpaste 2>/dev/null || echo '')"
+  pbcopy </dev/null 2>/dev/null || true    # clear
+
+  osascript <<'APPLESCRIPT' 2>/dev/null || true
+tell application "Figma" to activate
+delay 0.3
+tell application "System Events"
+  tell process "Figma"
+    -- Common "Copy Link" menu item labels (EN/KO)
+    try
+      tell menu bar item "Edit" of menu bar 1
+        click
+        delay 0.2
+        tell menu 1
+          set mis to name of every menu item
+          set labels to {"Copy link", "Copy Link", "링크 복사", "링크 복사하기"}
+          repeat with lbl in labels
+            if mis contains (lbl as text) then click menu item (lbl as text)
+            if mis contains (lbl as text) then exit repeat
+          end repeat
+        end tell
+      end tell
+    end try
+  end tell
+end tell
+APPLESCRIPT
+  sleep 0.4
+  local clip; clip="$(pbpaste 2>/dev/null || echo '')"
+  local team_id=""
+  if echo "$clip" | grep -q 'figma.com/files/team/'; then
+    team_id="$(echo "$clip" | sed -n 's|.*/team/\([A-Za-z0-9]*\)/.*|\1|p')"
+  fi
+  if [ -z "$team_id" ]; then
+    echo "  (couldn't auto-capture — paste your team URL now)"
+    echo -n "  URL: "
+    read -r url
+    team_id="$(echo "$url" | sed -n 's|.*/team/\([A-Za-z0-9]*\)/.*|\1|p')"
+  fi
+  [ -n "$team_id" ] || die "couldn't extract team id"
+  _config_set default_team_id "$team_id"
+  echo "✓ team id saved: $team_id"
+  [ -n "$before" ] && printf '%s' "$before" | pbcopy
+  hermes_notify "figx: team id $team_id saved" || true
+}
+
+team_ensure_id() {
+  # Used by commands that need a team id. Uses saved config, otherwise
+  # triggers autodetect (interactive).
+  local id; id="$(_config_get default_team_id 2>/dev/null)"
+  if [ -n "$id" ]; then
+    echo "$id"
+    return 0
+  fi
+  echo "→ no team id saved; running autodetect" >&2
+  team_autodetect >&2
+  _config_get default_team_id
 }
 
 files_verify() {
