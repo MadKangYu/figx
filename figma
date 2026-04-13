@@ -206,7 +206,8 @@ cmd_files() {
         set)     _config_set default_team_id "$1"; echo "✓ default team id: $1" ;;
         current) _config_get default_team_id ;;
         open)    team_open "$@" ;;
-        new-project) team_new_project "$@" ;;
+        detect)  team_detect ;;
+        new-project|create-project) team_new_project "$@" ;;
         *) die "files team: unknown subcommand '$tsub' (set|current|open|new-project)" ;;
       esac
       ;;
@@ -244,47 +245,94 @@ team_open() {
 }
 
 team_new_project() {
-  # Best-effort AppleScript to click the "+ New project" / "+ 새로 만들기"
-  # control in the Figma Desktop sidebar. Figma is Electron, so many
-  # controls are canvas-drawn and not AX-accessible. If clicking fails,
-  # we fall through to keystroke the standard Figma shortcut for New
-  # project (currently unbound; we emit a clear diagnostic instead).
+  # Create a new project on the currently-viewed team. Two-stage Figma
+  # dialog: "이름" (name) input → 계속 (Continue) → [step 2 auto-defaults
+  # usually fine]. Works on EN + KO layouts.
   local project_name="${1:-New Project}"
   local team_id="${2:-$(_config_get default_team_id 2>/dev/null)}"
-  [ -n "$team_id" ] && open "figma://team/$team_id"
-  sleep 1.5
-  osascript <<APPLESCRIPT
+  [ -n "$team_id" ] && { open "figma://team/$team_id"; sleep 1.5; }
+  PROJ_NAME_ENV="$project_name" osascript <<'APPLESCRIPT'
+set projName to system attribute "PROJ_NAME_ENV"
+set plusLabels to {"+ 프로젝트", "+ Project", "+ New project", "+ 새 프로젝트", "프로젝트", "Project", "New project"}
+set continueLabels to {"계속", "Continue", "Next", "Create"}
+
 tell application "Figma" to activate
-delay 0.5
+delay 0.6
+
 tell application "System Events"
   tell process "Figma"
-    -- File menu → New project…  (available when a team is selected)
+    -- 1. Find & click the "+ 프로젝트" button on the team home
+    set clickedPlus to false
     try
-      tell menu bar item "File" of menu bar 1
-        click
-        delay 0.3
-        tell menu 1
-          if (name of every menu item) contains "New project…" then
-            click menu item "New project…"
-          else if (name of every menu item) contains "새 프로젝트…" then
-            click menu item "새 프로젝트…"
-          else
-            error "No 'New project' menu item visible (team not selected?)"
-          end if
-        end tell
-      end tell
-      delay 0.7
-      keystroke "$project_name"
-      delay 0.2
-      key code 36
-      return "✓ new project '$project_name' dispatched"
-    on error e
-      error "Figma UI didn't expose New project: " & e
+      set btns to entire contents of window 1
+      repeat with el in btns
+        try
+          set n to name of el
+          repeat with lbl in plusLabels
+            if n is (lbl as text) then
+              click el
+              set clickedPlus to true
+              exit repeat
+            end if
+          end repeat
+          if clickedPlus then exit repeat
+        end try
+      end repeat
     end try
+
+    if not clickedPlus then error "Couldn't find '+ 프로젝트' button — are you on the team home page?"
+    delay 0.8
+
+    -- 2. Type the project name (focused input by default)
+    keystroke projName
+    delay 0.3
+
+    -- 3. Click 계속 / Continue
+    set clickedCont to false
+    try
+      set btns2 to entire contents of window 1
+      repeat with el in btns2
+        try
+          set n to name of el
+          repeat with lbl in continueLabels
+            if n is (lbl as text) then
+              click el
+              set clickedCont to true
+              exit repeat
+            end if
+          end repeat
+          if clickedCont then exit repeat
+        end try
+      end repeat
+    end try
+    if not clickedCont then
+      -- fallback: press Enter
+      key code 36
+    end if
+    delay 0.8
+    -- Step 2 of dialog: accept defaults with Return
+    key code 36
+    return "✓ project '" & projName & "' created"
   end tell
 end tell
 APPLESCRIPT
   hermes_notify "figx: new project '$project_name' dispatched" || true
+}
+
+team_detect() {
+  # Read the Figma Desktop window title to identify the currently-viewed
+  # team/file. Outputs the raw title for the user to use.
+  osascript <<'APPLESCRIPT' 2>/dev/null
+tell application "System Events"
+  tell process "Figma"
+    try
+      return name of front window
+    on error
+      return ""
+    end try
+  end tell
+end tell
+APPLESCRIPT
 }
 
 files_verify() {
