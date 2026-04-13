@@ -270,23 +270,74 @@ plugin_run() {
 }
 
 plugin_register_mcp() {
-  # Register figma-mcp-go as an MCP server for Claude Code / Cursor / VS Code.
-  # Writes to whichever target is specified (default: ~/.mcp.json user-scope).
-  local target="${1:-$HOME/.mcp.json}"
+  # Register figma-mcp-go as an MCP server for Claude Code / Cursor / VS Code
+  # (~/.mcp.json, JSON) and/or OpenAI Codex CLI (~/.codex/config.toml, TOML).
+  # Usage:
+  #   figx plugin register-mcp                 # auto: registers everywhere a config exists
+  #   figx plugin register-mcp claude          # ~/.mcp.json only
+  #   figx plugin register-mcp codex           # ~/.codex/config.toml only
+  #   figx plugin register-mcp /custom/.mcp.json   # explicit path
+  local target="${1:-auto}"
   local server_name="${FIGX_MCP_NAME:-figma-mcp-go}"
-  [ -f "$target" ] || echo '{"mcpServers":{}}' >"$target"
-  # Merge-preserving update via jq
-  local tmp; tmp="$(mktemp)"
-  jq --arg name "$server_name" '
-    .mcpServers //= {} |
-    .mcpServers[$name] = {
-      "command": "npx",
-      "args": ["-y", "@vkhanhqui/figma-mcp-go@latest"]
-    }
-  ' "$target" >"$tmp" && mv "$tmp" "$target"
-  echo "✓ registered MCP server '$server_name' in $target"
-  echo "  Restart Claude Code / Cursor / VS Code to pick up the change."
-  hermes_notify "figx: MCP registered ($server_name → $target)" || true
+
+  _reg_claude() {
+    local path="${1:-$HOME/.mcp.json}"
+    [ -f "$path" ] || echo '{"mcpServers":{}}' >"$path"
+    local tmp; tmp="$(mktemp)"
+    jq --arg name "$server_name" '
+      .mcpServers //= {} |
+      .mcpServers[$name] = {
+        "command": "npx",
+        "args": ["-y", "@vkhanhqui/figma-mcp-go@latest"]
+      }
+    ' "$path" >"$tmp" && mv "$tmp" "$path"
+    echo "✓ Claude/Cursor/VS Code registered in $path"
+  }
+
+  _reg_codex() {
+    local path="${1:-$HOME/.codex/config.toml}"
+    mkdir -p "$(dirname "$path")"
+    [ -f "$path" ] || touch "$path"
+    # Remove any prior block for this server, then append fresh.
+    local tmp; tmp="$(mktemp)"
+    awk -v section="[mcp_servers.${server_name}]" '
+      BEGIN { skip = 0 }
+      {
+        if ($0 == section) { skip = 1; next }
+        if (skip && /^\[/)  { skip = 0 }
+        if (!skip) print
+      }
+    ' "$path" >"$tmp"
+    {
+      cat "$tmp"
+      echo ""
+      echo "[mcp_servers.${server_name}]"
+      echo 'command = "npx"'
+      echo 'args = ["-y", "@vkhanhqui/figma-mcp-go@latest"]'
+    } >"$path"
+    rm -f "$tmp"
+    echo "✓ Codex CLI registered in $path"
+  }
+
+  case "$target" in
+    auto)
+      local acted=0
+      [ -f "$HOME/.mcp.json" ] || { _reg_claude "$HOME/.mcp.json"; acted=1; }
+      [ -f "$HOME/.mcp.json" ] && { _reg_claude "$HOME/.mcp.json"; acted=1; }
+      if [ -f "$HOME/.codex/config.toml" ] || [ -d "$HOME/.codex" ]; then
+        _reg_codex "$HOME/.codex/config.toml"; acted=1
+      fi
+      [ "$acted" = 1 ] || die "no target config found — pass 'claude' or 'codex'"
+      ;;
+    claude) _reg_claude "$HOME/.mcp.json" ;;
+    codex)  _reg_codex  "$HOME/.codex/config.toml" ;;
+    */*.json|/*.json|~/*.json|*.json) _reg_claude "$target" ;;
+    */*.toml|/*.toml|~/*.toml|*.toml) _reg_codex  "$target" ;;
+    *) die "unknown target '$target' (use: auto|claude|codex|<path>)" ;;
+  esac
+
+  echo "Restart the affected agent (Claude Code / Cursor / VS Code / Codex) to pick up the change."
+  hermes_notify "figx: MCP '$server_name' registered ($target)" || true
 }
 
 plugin_open() {
