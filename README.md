@@ -1,191 +1,236 @@
-# figx — a pragmatic Figma command line
+# figx — the Figma pipeline you'll actually keep using
 
 <p align="left">
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <img alt="platform" src="https://img.shields.io/badge/platform-macOS-lightgrey">
   <img alt="shell" src="https://img.shields.io/badge/shell-bash-89e051">
   <a href="CHANGELOG.md"><img alt="version" src="https://img.shields.io/badge/version-0.1.0-orange"></a>
+  <a href="https://github.com/MadKangYu/figx/stargazers"><img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/MadKangYu/figx?style=social"></a>
 </p>
 
-`figx` is a single-file bash CLI for working with Figma from the terminal.
-It wraps the Figma REST API, drives the `figma-mcp-go` Figma Desktop
-plugin via AppleScript, pushes events to
-[Hermes-Agent](https://github.com/anthropics/hermes-agent), and keeps
-Personal Access Tokens in the macOS Keychain.
-
-**Why:** shipping design tokens through Figma shouldn't require a desktop
-plugin wizard every time. `figx` makes the happy path — "read the Python
-constants in my repo and turn them into a Figma variables collection" —
-a single command, and degrades gracefully when your plan doesn't unlock
-the Variables REST API.
+> **For Figma Professional / Organization / Enterprise users.**
+> A lean macOS CLI that turns your design-token source of truth into real
+> Figma Variables, launches the `figma-mcp-go` plugin for you without
+> hunting through menus, and streams every step into Hermes-Agent.
+> Built because shipping a token update shouldn't cost you fifteen
+> clicks every time.
 
 ---
 
-## Features
+## Why figx
 
-- **One-shot token publish.** `figx export tokens` emits W3C DTCG JSON,
-  CSS custom properties, and Tokens Studio for Figma `tokens.studio.json`
-  in one pass — usable on every Figma plan.
-- **Figma Desktop automation without a plugin wizard.** `figx plugin open`
-  clicks **Plugins → Development → Figma MCP Go** through a deterministic
-  AppleScript menu traversal (locale-independent, Quick Actions-free).
-- **Safe credential handling.** PATs are validated against `/v1/me`
-  before being stored, kept in macOS Keychain, and fall back to a
-  `FIGMA_PAT` env var in CI.
-- **Structured retries.** 401/403 stop immediately; 429/5xx get five
-  exponential retries; uncaught errors flow through an `ERR` trap into
-  both the local audit log and Hermes.
-- **Interactive onboarding.** `figx onboarding` walks a new user through
-  the 7 steps that actually matter (account → app → PAT → file → plugin →
-  apply → verify), instead of leaving them to the docs.
-- **Hermes-native.** Every command emits an event to the `figma-tokens`
-  Hermes webhook; if Hermes is down, events hit `~/.local/state/figma-cli/events.log`
-  and the command still succeeds.
+You already pay for a plan that unlocks multi-mode Variables, code
+connect, and libraries. What you don't have is a clean way to keep them
+in lockstep with your codebase — Figma's own CLI offering is minimal,
+Tokens Studio still needs a wizard, and `figma-mcp-go` needs a plugin
+window that never quite stays open. `figx` stitches all three into a
+single hybrid pipeline that:
+
+- **Reads your design tokens from code** (Python constants via AST, no
+  execution), and emits W3C DTCG + CSS + Tokens Studio payloads in one
+  pass.
+- **Launches the Figma plugin for you**, clicking `Plugins → 개발 →
+  Figma MCP Go` through a locale-independent AppleScript menu
+  traversal. No Quick Actions, no lost focus.
+- **Keeps secrets in the Keychain**, validates before storing, and
+  refuses to retry 401/403 so you never burn through a 90-day PAT
+  debugging scopes.
+- **Talks to Hermes-Agent** on every event — starts, successes,
+  failures — so your phone pings when a publish finishes even if you
+  walked away.
+
+## Core features in action
+
+Each block below is actual output from this machine. They're what you
+get.
+
+### 1. `figx doctor` — checks everything before you start
+
+```
+→ figma-cli doctor
+  ✓ curl
+  ✓ jq
+  ✓ security
+  ✓ gh
+  ✓ Keychain PAT
+  ✓ config: /Users/yu/.config/figma/cli.toml
+  ✓ hermes Hermes Agent v0.8.0 (2026.4.8)
+```
+
+### 2. `figx auth status` — PAT lives in Keychain, not in your shell history
+
+```
+✓ PAT present in Keychain (service=figma-cli)
+```
+
+### 3. `figx files current` — your working file, remembered
+
+```
+kzHqIqhzl3xJ5GqE0N2aMl
+```
+
+### 4. `figx plugin status` — WebSocket + manifest check in one
+
+```
+✓ figma-mcp-go WS up on 127.0.0.1:1994
+✓ manifest: /Users/yu/Projects/figma-mcp-learning/plugins/figma-mcp-go/plugin/manifest.json
+```
+
+### 5. `figx plugin open` — the move that replaces 5 clicks
+
+```
+✓ Figma MCP Go dispatched
+✓ WS 1994 listening
+```
+
+Under the hood: AppleScript clicks `Plugins → 개발 → Figma MCP Go` —
+deterministic, locale-independent, works in both Design Mode and Dev
+Mode.
+
+### 6. `figx hermes check` — observability on
+
+```
+✓ Hermes Agent v0.8.0 (2026.4.8)
+✓ Up to date
+```
+
+## The hybrid workflow this CLI was built for
+
+The efficient path on a paid plan isn't REST or plugin — it's **both at
+the same time**. figx makes that trivial.
+
+```
+   Your codebase                                   Figma Desktop
+   ─────────────                                   ─────────────
+   design tokens in code         (1) extract              │
+     (e.g. pdp_pipeline/make_pdp.py) ─────────►  tokens.studio.json
+                                                    tokens.dtcg.json
+                                                    tokens.css
+                                                          │
+                                     (2) push via         ▼
+                                         Tokens Studio    Variables
+                                         plugin           (Pep / Cer modes)
+                                                          │
+                                     (3) figma-mcp-go     ▼
+    figx plugin open  ──────────►    plugin              Styles
+                                                          Components
+                                                          Frames
+                                     (4) figx publish     ▼
+                                                          Library published
+
+   figx hermes notify ──────────► Hermes ──► Telegram / Slack / Discord
+```
+
+| Step | Tool | What you type |
+|---|---|---|
+| Extract tokens from code | `figx` / `tools/extract_from_py.py` | `figx export tokens --fmt dtcg` |
+| Push to Variables (Pep/Cer) | Tokens Studio for Figma | plugin UI, once |
+| Create Styles / Components | figma-mcp-go via MCP | agent calls after `figx plugin open` |
+| Publish library | manual + polled | `figx publish` |
+| Notify / audit | Hermes webhook | automatic |
+
+Enterprise users can substitute step 2 with `figx vars apply` (Variables
+REST). Everyone else goes through Tokens Studio — same end state.
 
 ## Install
 
+### One-shot bootstrap (recommended)
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MadKangYu/figx/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MadKangYu/figx/main/bootstrap.sh | bash
 ```
 
-Or manually:
+The script installs `figx`, pulls the latest `figma-mcp-go` plugin
+release, warms the MCP server, checks Accessibility permission, and
+registers a Hermes webhook if Hermes is present.
+
+### Manual
 
 ```bash
 git clone https://github.com/MadKangYu/figx.git ~/scripts/figma-cli
 ln -sf ~/scripts/figma-cli/figma ~/.local/bin/figx
-figx version
+figx doctor
 ```
 
-Requirements: macOS, `curl`, `jq`, `python3`, `security`, and `gh` on
-`PATH`. `figx doctor` confirms them for you.
+> Naming note — the binary is **`figx`**, not `figma`. npm's `figma`
+> binary would shadow us on most Node setups; this way you stay out of
+> that fight.
 
-> Heads-up: the binary is named `figx` (not `figma`) because npm's
-> `figma` CLI shadows `/usr/local/bin/figma` on most Node setups.
-
-## Quick start
+## Quick start (5 minutes on a configured machine)
 
 ```bash
-figx onboarding                           # step-by-step wizard
-figx auth login                           # paste PAT, stored in Keychain
+figx auth login                                   # paste PAT once
 figx files find "https://www.figma.com/design/XXXXX/..."
-figx vars get | jq '.meta.variableCollections[].name'
-figx export tokens --fmt css --out tokens.css
-figx plugin open                          # launches figma-mcp-go inside Figma Desktop
+figx plugin open                                  # launches Figma MCP Go
+figx export tokens --fmt css  --out src/tokens.css
+figx export tokens --fmt dtcg --out design/tokens.dtcg.json
+# Tokens Studio plugin → Load from file system → tokens.studio.json → Push
+figx publish                                      # guided manual publish
 ```
 
-## Commands
+First-time users: `figx onboarding` walks the 7 preconditions
+(account → app → PAT → file → plugin → apply → verify) one at a time.
 
-| Command                                            | Purpose                                                              |
-| -------------------------------------------------- | -------------------------------------------------------------------- |
-| `figx version` / `figx doctor` / `figx onboarding` | environment + guided setup                                           |
-| `figx auth {login,status,logout}`                  | Keychain-backed PAT management                                       |
-| `figx files {current,set,find,list}`               | file-key discovery                                                   |
-| `figx vars {get,dump,apply}`                       | Variables CRUD (write requires Enterprise)                           |
-| `figx publish`                                     | guided manual publish, polls `/variables/published` for up to 20 min |
-| `figx devmode`                                     | file metadata + Dev Resources                                        |
-| `figx export tokens --fmt {dtcg,css}`              | W3C DTCG / CSS custom properties                                     |
-| `figx plugin {install,open,run,status}`            | manage the figma-mcp-go plugin                                       |
-| `figx hermes {check,notify}`                       | Hermes version + ad-hoc webhook push                                 |
+## Command surface
 
-Full reference: [`docs/CLI.md`](docs/CLI.md).
+| Command | Purpose |
+|---|---|
+| `figx version` / `figx doctor` / `figx onboarding` | environment + guided setup |
+| `figx auth {login,status,logout}` | Keychain-backed PAT management |
+| `figx files {current,set,find,list}` | file-key discovery |
+| `figx vars {get,dump,apply}` | Variables read / write (write = Enterprise only) |
+| `figx publish` | guided manual publish, polls `/variables/published` up to 20 min |
+| `figx devmode` | file metadata + Dev Resources |
+| `figx export tokens --fmt {dtcg,css}` | W3C DTCG / CSS custom properties |
+| `figx plugin {install,open,run,status}` | figma-mcp-go plugin management |
+| `figx hermes {check,notify}` | Hermes version + ad-hoc webhook push |
 
-## Design tokens bridge
+Deeper reference: [`docs/CLI.md`](docs/CLI.md).
 
-`tools/extract_from_py.py` parses the top-level `PAD`, `SIZE`, `LH`,
-`PALETTE`, `HL`, and `COLORS` constants of a Python design-pipeline file
-(via `ast.literal_eval`, no execution) and produces three drop-in
-artifacts:
-
-| File                 | Target                                                                          |
-| -------------------- | ------------------------------------------------------------------------------- |
-| `tokens.dtcg.json`   | W3C Design Tokens Community Group — a standard many tools read                  |
-| `tokens.css`         | CSS custom properties with a `[data-sku='cer']` SKU toggle                      |
-| `tokens.studio.json` | Tokens Studio for Figma plugin — `base / sku/pep / sku/cer` sets with `$themes` |
-
-Tokens Studio is the fallback path when you're not on Figma Enterprise:
-import `tokens.studio.json`, activate a theme, hit **Push to Figma** and
-the variables appear in the file's Local Variables panel.
-
-## Auth and safety
-
-- PAT scopes map to
-  [Figma's 2025-04 split](https://developers.figma.com/docs/rest-api/changelog/):
-  `file_content:read`, `file_metadata:read`, `file_dev_resources:read` —
-  plus `file_variables:read/write` if your workspace exposes them.
-- PATs have a **90-day maximum** (April 2025 policy change); `figx auth
-login` records the issue time for you.
-- Keys never hit disk in plaintext outside the Keychain-backed entry.
-- All requests go through `lib/api.sh`; every non-2xx is either stopped
-  (401/403) or retried with exponential backoff (429/5xx).
-
-## Hermes integration
+## How the pieces fit
 
 ```
-figx                                                     Hermes Agent
- └── lib/hermes.sh ──► POST /webhooks/figma-tokens ──► delivery (log | telegram | slack | …)
-                          │
-                          └── on failure, append to ~/.local/state/figma-cli/events.log
+figx (this CLI)
+ ├── REST API  ────────────►  Figma cloud    (read everywhere, write on Enterprise)
+ ├── AppleScript menu click ►  Figma Desktop (deterministic plugin launch)
+ ├── npx @vkhanhqui/figma-mcp-go ►  MCP server on ws://127.0.0.1:1994
+ │                                    └── figma-mcp-go Figma plugin connects here
+ └── hermes webhook ──────►  Hermes Agent ── delivery (log | Telegram | Slack)
 ```
 
-Create the webhook once:
+## Safety defaults
 
-```bash
-hermes webhook subscribe figma-tokens \
-  --deliver log \
-  --prompt "figx: {message}"
-```
+- PAT validated against `/v1/me` before storing.
+- 401/403 stop **immediately** — no retrying auth failures.
+- 429/5xx/network errors retry 5× with 2→4→8→16→32 s backoff.
+- Uncaught errors flow through an `ERR` trap into both the local audit
+  log and Hermes.
+- Webhook delivery failure never propagates to the command's exit code.
 
-Switch it to Telegram at any time:
+## Plugin ecosystem
 
-```bash
-hermes webhook rm figma-tokens
-hermes webhook subscribe figma-tokens \
-  --deliver telegram --deliver-chat-id <CHAT_ID>
-```
+`figx` is designed around `figma-mcp-go` + `Tokens Studio for Figma`.
+For related projects and IDE integrations — figma-mcp-bridge, figma
+copilot, vscode-figma-mcp-helper, and more — see
+[`docs/ESSENTIAL-PLUGINS.md`](docs/ESSENTIAL-PLUGINS.md).
 
-## Troubleshooting
+## Docs
 
-| Symptom                             | Cause                                                                      | Fix                                                        |
-| ----------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `unknown command 'auth'`            | npm `figma` CLI shadows your shim                                          | use `figx`, not `figma`                                    |
-| 403 `file_variables:read`           | plan lacks Variables API (non-Enterprise)                                  | use Tokens Studio instead; see `tokens.studio.json` output |
-| `plugin not connected`              | the Figma MCP Go plugin is not running in Figma Desktop                    | `figx plugin open`                                         |
-| `Accessibility permission required` | Terminal app isn't in System Settings → Privacy & Security → Accessibility | enable it, re-run `figx plugin open`                       |
-| `429 rate limited`                  | Figma API cap                                                              | CLI retries with backoff; reduce concurrency if persistent |
-
-Long-form failure dictionary: [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
-
-## Repository layout
-
-```
-figma-cli/
-├── figma             # single entrypoint — routes subcommands
-├── lib/
-│   ├── api.sh        # curl + retry + HTTP policy
-│   ├── keychain.sh   # macOS Keychain wrapper
-│   ├── hermes.sh     # Hermes webhook adapter, local-log fallback
-│   ├── files.sh      # file-key parsing / config persistence
-│   ├── vars.sh       # /variables read + write
-│   └── onboarding.sh # interactive 7-step wizard
-├── tools/
-│   ├── extract_from_py.py       # Python AST → tokens.{dtcg,css,studio}.json
-│   ├── auto-import-plugin.applescript
-│   └── auto-run-plugin.applescript
-├── docs/             # long-form reference (CLI, tokens, troubleshooting)
-├── install.sh        # one-liner installer
-├── CHANGELOG.md
-├── CONTRIBUTING.md
-└── LICENSE
-```
+- [Setup](docs/SETUP.md) — from zero to first publish
+- [CLI reference](docs/CLI.md) — every subcommand
+- [Troubleshooting](docs/TROUBLESHOOTING.md) — common failure dictionary
+- [Essential Figma plugins](docs/ESSENTIAL-PLUGINS.md) — curated list
+- [Is figx really a CLI?](docs/WHAT-IS-A-CLI.md) — yes, and why
 
 ## License
 
-[MIT](LICENSE) © 2026 KangYu.
+[MIT](LICENSE) © 2026 [KangYu (MadKangYu)](https://github.com/MadKangYu) · richardowen7212@gmail.com
 
 ## Credits
 
-- [`vkhanhqui/figma-mcp-go`](https://github.com/vkhanhqui/figma-mcp-go)
-  — the Figma Desktop development plugin and MCP server this CLI drives.
-- [Tokens Studio for Figma](https://tokens.studio) — the no-Enterprise
-  path for importing variables.
-- Figma REST API docs — https://developers.figma.com/docs/rest-api/
+- [vkhanhqui/figma-mcp-go](https://github.com/vkhanhqui/figma-mcp-go) — the
+  Figma Desktop plugin and MCP server this CLI drives.
+- [Tokens Studio for Figma](https://tokens.studio) — the import-tokens
+  plugin that makes the hybrid path work on any paid plan.
+- [Hermes-Agent](https://github.com/anthropics/hermes-agent) — the
+  messaging bridge every figx event lands in.
