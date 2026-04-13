@@ -365,6 +365,66 @@ plugin_register_mcp() {
   hermes_notify "figx: MCP '$server_name' registered ($target)" || true
 }
 
+figma_update() {
+  if ! pgrep -x Figma >/dev/null 2>&1; then
+    open -a Figma 2>/dev/null || die "Figma Desktop not installed"
+    sleep 1
+  fi
+  osascript <<'APPLESCRIPT' || die "could not trigger update check (check Accessibility)"
+tell application "Figma" to activate
+delay 0.4
+tell application "System Events"
+  tell process "Figma"
+    tell menu bar item "Figma" of menu bar 1
+      click
+      delay 0.25
+      tell menu 1
+        set mis to name of every menu item
+        set cands to {"Check for updates", "Check for updates…", "업데이트 확인", "업데이트 확인…"}
+        repeat with c in cands
+          if mis contains (c as text) then
+            click menu item (c as text)
+            return
+          end if
+        end repeat
+        error "Check-for-updates menu item not found"
+      end tell
+    end tell
+  end tell
+end tell
+APPLESCRIPT
+  echo "✓ Figma update check triggered"
+  hermes_notify "figx: Figma update check initiated" || true
+}
+
+project_find() {
+  local dir="$PWD"
+  while [ "$dir" != "/" ]; do
+    if [ -f "$dir/.figx/project.toml" ] || [ -f "$dir/pdp_pipeline/make_pdp.py" ]; then
+      echo "$dir"; return 0
+    fi
+    dir="$(dirname "$dir")"
+  done
+  echo "no figx project found walking up from $PWD" >&2
+  return 1
+}
+
+project_init() {
+  local root="${1:-$PWD}"
+  mkdir -p "$root/.figx"
+  cat >"$root/.figx/project.toml" <<TOML
+# figx per-project config — committed alongside code
+name = "$(basename "$root")"
+tokens_src = "pdp_pipeline/make_pdp.py"
+tokens_out = "design-tokens"
+# figma_file_key = "XXXX"
+# hermes_webhook = "figma-tokens"
+TOML
+  echo "✓ $root/.figx/project.toml created"
+  echo "  For multi-project context switching, register with Hermes-Agent:"
+  echo "    hermes webhook subscribe figx-$(basename "$root") --deliver log"
+}
+
 plugin_open() {
   # Launch the already-imported figma-mcp-go plugin inside Figma Desktop.
   # Locale-aware deterministic menu traversal via AppleScript System Events.
