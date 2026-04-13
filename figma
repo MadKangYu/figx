@@ -6,7 +6,9 @@
 #
 # Subcommands:
 #   auth {login|status|logout}
-#   files {list|find <pattern>|current|set <key>}
+#   files {list|find|current|set|open <key|url>|verify}
+#     open:   launch Figma Desktop directly to the file, then plugin open
+#     verify: check whether the file is in a paid team or personal Drafts
 #   vars  {get|apply <tokens.json>|dump <out.json>}
 #   publish [--file <key>]           # Prints instructions (REST has no publish endpoint)
 #   devmode [--file <key>]            # Inspects dev resources + meta
@@ -196,8 +198,56 @@ cmd_files() {
     find)    files_find "$@" ;;
     current) files_current ;;
     set)     files_set "$@" ;;
+    open)    files_open "$@" ;;
+    verify)  files_verify "$@" ;;
     *) die "files: unknown subcommand '$sub'" ;;
   esac
+}
+
+files_open() {
+  # Launch Figma Desktop to a specific file, then run figx plugin open
+  # so the agent side is connected without any manual clicking.
+  # Accepts either a raw file-key or a full figma.com URL.
+  local arg="${1:-}"
+  local key
+  if [ -z "$arg" ]; then
+    key="$(_config_get default_file_key 2>/dev/null)"
+  elif echo "$arg" | grep -q 'figma.com/'; then
+    key="$(echo "$arg" | sed -n 's|.*figma.com/\(design\|file\|board\)/\([A-Za-z0-9]*\).*|\2|p')"
+  else
+    key="$arg"
+  fi
+  [ -n "$key" ] || die "no file key — pass <key|url> or run 'figx files set <key>'"
+  echo "→ opening file $key in Figma Desktop"
+  open "figma://file/$key"
+  sleep 3
+  plugin_open
+  hermes_notify "figx: opened file $key + plugin dispatched" || true
+}
+
+files_verify() {
+  # Verify the resolved file sits in a paid workspace, not free Drafts.
+  # GET /v1/files/:key/meta returns role + document_id; from the team/project
+  # endpoints we can infer a paid plan. Free drafts have no project/team.
+  local key; key="$(files_resolve_key "$@")" || return 2
+  echo "→ verifying workspace for file $key"
+  local meta; meta="$(api_get "/v1/files/$key/meta" 2>/dev/null || echo '{}')"
+  local name; name="$(echo "$meta" | jq -r '.file.name // .name // "?"')"
+  local editor; editor="$(echo "$meta" | jq -r '.file.editorType // .editorType // "?"')"
+  local role;   role="$(echo "$meta" | jq -r '.file.role // .role // "?"')"
+  echo "  name:       $name"
+  echo "  editor:     $editor"
+  echo "  your role:  $role"
+  # Drafts detection: when the endpoint doesn't carry a team/project id
+  # the file is personal — Variables multi-mode features are disabled.
+  local has_team; has_team="$(echo "$meta" | jq -r '.file.team_id // .team_id // "none"')"
+  if [ "$has_team" = "none" ] || [ -z "$has_team" ]; then
+    echo "  ⚠ appears to be a personal Drafts file — move it into a paid team project"
+    echo "     otherwise Variables multi-mode (Pep/Cer) and Tokens Studio push may fail."
+  else
+    echo "  ✓ team-scoped file (id: $has_team)"
+  fi
+  hermes_notify "figx: verified file $key (team=$has_team)" || true
 }
 
 cmd_vars() {
