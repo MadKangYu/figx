@@ -19,6 +19,7 @@
 #   hermes {check|notify <msg>}       # Hermes sanity + ad-hoc notify
 #   export tokens [--fmt dtcg|css] [--out <file>]
 #   doctor                            # Environment self-check
+#   permissions                       # macOS privacy permission audit
 #
 # Failure policy: never leave orphaned state. Every command exits non-zero on
 # the first real error. Every action emits a Hermes event (best-effort).
@@ -96,6 +97,81 @@ cmd_doctor() {
     echo "  ○ hermes not on PATH (notifications will log to file only)"
   fi
   [ $ok -eq 1 ] || die "doctor found missing deps"
+}
+
+cmd_permissions() {
+  # Check all macOS privacy / permission surfaces figx touches.
+  echo "→ figx permissions check"
+  local all_ok=1
+
+  # 1. Accessibility — required for AppleScript menu navigation
+  if osascript -e 'tell application "System Events" to return (UI elements enabled)' 2>/dev/null | grep -qi true; then
+    echo "  ✓ Accessibility (System Events UI)"
+  else
+    echo "  ✗ Accessibility — grant to your terminal in:"
+    echo "       System Settings → Privacy & Security → Accessibility"
+    all_ok=0
+  fi
+
+  # 2. Automation (App-to-App) — attempt a benign AppleScript against Figma
+  #    to provoke the permission prompt if not yet granted.
+  if pgrep -x Figma >/dev/null 2>&1; then
+    if osascript -e 'tell application "Figma" to name' >/dev/null 2>&1; then
+      echo "  ✓ Automation (controlling Figma)"
+    else
+      echo "  ✗ Automation (Figma) — grant to your terminal in:"
+      echo "       System Settings → Privacy & Security → Automation → your terminal → Figma ☑"
+      all_ok=0
+    fi
+  else
+    echo "  ○ Automation — Figma Desktop not running; skipping probe"
+  fi
+
+  # 3. Automation (System Events) — also gated the first time
+  if osascript -e 'tell application "System Events" to name' >/dev/null 2>&1; then
+    echo "  ✓ Automation (System Events)"
+  else
+    echo "  ✗ Automation (System Events) — grant in:"
+    echo "       System Settings → Privacy & Security → Automation → your terminal → System Events ☑"
+    all_ok=0
+  fi
+
+  # 4. Keychain access — attempt a non-destructive lookup
+  if command -v security >/dev/null 2>&1; then
+    if security list-keychains >/dev/null 2>&1; then
+      echo "  ✓ Keychain access"
+    else
+      echo "  ✗ Keychain — unlock login keychain:"
+      echo "       security unlock-keychain ~/Library/Keychains/login.keychain-db"
+      all_ok=0
+    fi
+  fi
+
+  # 5. Firewall / outbound — probe api.figma.com
+  if curl -sS -o /dev/null -w '%{http_code}' --max-time 5 https://api.figma.com/v1/me | grep -q '^[0-9]'; then
+    echo "  ✓ Outbound to api.figma.com"
+  else
+    echo "  ✗ Outbound blocked — check corporate proxy / firewall"
+    all_ok=0
+  fi
+
+  # 6. Local loopback — needed for figma-mcp-go WS
+  if nc -z 127.0.0.1 1994 2>/dev/null; then
+    echo "  ✓ Loopback 127.0.0.1:1994 reachable (figma-mcp-go WS)"
+  else
+    echo "  ○ Loopback 1994 idle (plugin not running — run 'figx plugin open')"
+  fi
+
+  # 7. macOS version
+  local macos; macos="$(sw_vers -productVersion 2>/dev/null)"
+  echo "  ℹ macOS $macos"
+
+  if [ $all_ok -eq 1 ]; then
+    echo "✓ all required permissions granted"
+  else
+    echo "✗ some permissions missing — fix above, then re-run 'figx permissions'"
+    return 1
+  fi
 }
 
 cmd_auth() {
@@ -342,6 +418,7 @@ main() {
   case "$cmd" in
     version|-v|--version) cmd_version ;;
     doctor)   cmd_doctor ;;
+    permissions|perms) cmd_permissions ;;
     onboarding|start|init) onboarding_run ;;
     auth)     cmd_auth "$@" ;;
     files)    cmd_files "$@" ;;
