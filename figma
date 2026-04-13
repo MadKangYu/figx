@@ -10,8 +10,12 @@
 #   vars  {get|apply <tokens.json>|dump <out.json>}
 #   publish [--file <key>]           # Prints instructions (REST has no publish endpoint)
 #   devmode [--file <key>]            # Inspects dev resources + meta
-#   plugin {install|open|run|status}  # figma-mcp-go plugin management
-#     open: click Figma Desktop menu Plugins→Development→Figma MCP Go (AppleScript)
+#   plugin {install|register-mcp|open|run|status}
+#     install:      stage the manifest for Figma Desktop (one-time import)
+#     register-mcp: add the MCP server to ~/.mcp.json (Claude Code / Cursor)
+#     open:         click Plugins→Development→Figma MCP Go (AppleScript)
+#     run:          start the MCP WebSocket server in the foreground
+#     status:       probe WS port + manifest
 #   hermes {check|notify <msg>}       # Hermes sanity + ad-hoc notify
 #   export tokens [--fmt dtcg|css] [--out <file>]
 #   doctor                            # Environment self-check
@@ -158,10 +162,11 @@ cmd_devmode() {
 cmd_plugin() {
   local sub="${1:-status}"; shift || true
   case "$sub" in
-    install) plugin_install "$@" ;;
-    open)    plugin_open "$@" ;;
-    run)     plugin_run "$@" ;;
-    status)  plugin_status ;;
+    install)      plugin_install "$@" ;;
+    register-mcp) plugin_register_mcp "$@" ;;
+    open)         plugin_open "$@" ;;
+    run)          plugin_run "$@" ;;
+    status)       plugin_status ;;
     *) die "plugin: unknown subcommand '$sub'" ;;
   esac
 }
@@ -186,6 +191,26 @@ plugin_run() {
   echo "→ Starting figma-mcp-go MCP server (ws://127.0.0.1:1994)"
   echo "  Keep Figma Desktop open and run the Figma MCP Go plugin inside it."
   npx -y @vkhanhqui/figma-mcp-go
+}
+
+plugin_register_mcp() {
+  # Register figma-mcp-go as an MCP server for Claude Code / Cursor / VS Code.
+  # Writes to whichever target is specified (default: ~/.mcp.json user-scope).
+  local target="${1:-$HOME/.mcp.json}"
+  local server_name="${FIGX_MCP_NAME:-figma-mcp-go}"
+  [ -f "$target" ] || echo '{"mcpServers":{}}' >"$target"
+  # Merge-preserving update via jq
+  local tmp; tmp="$(mktemp)"
+  jq --arg name "$server_name" '
+    .mcpServers //= {} |
+    .mcpServers[$name] = {
+      "command": "npx",
+      "args": ["-y", "@vkhanhqui/figma-mcp-go@latest"]
+    }
+  ' "$target" >"$tmp" && mv "$tmp" "$target"
+  echo "✓ registered MCP server '$server_name' in $target"
+  echo "  Restart Claude Code / Cursor / VS Code to pick up the change."
+  hermes_notify "figx: MCP registered ($server_name → $target)" || true
 }
 
 plugin_open() {

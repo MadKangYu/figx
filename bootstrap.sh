@@ -71,6 +71,22 @@ else
   warn "npx not found — install Node to use plugin run"
 fi
 
+# 4b. Register figma-mcp-go as an MCP server in ~/.mcp.json
+say "registering figma-mcp-go in ~/.mcp.json"
+if command -v jq >/dev/null 2>&1; then
+  target="$HOME/.mcp.json"
+  [ -f "$target" ] || printf '{"mcpServers":{}}\n' >"$target"
+  tmp="$(mktemp)"
+  jq '.mcpServers //= {} |
+      .mcpServers["figma-mcp-go"] = {
+        "command": "npx",
+        "args": ["-y", "@vkhanhqui/figma-mcp-go@latest"]
+      }' "$target" >"$tmp" && mv "$tmp" "$target"
+  say "MCP server registered (restart Claude Code / Cursor to pick it up)"
+else
+  warn "jq missing — run \`figx plugin register-mcp\` manually later"
+fi
+
 # 5. Accessibility check (required for `figx plugin open`)
 say "checking Accessibility permission"
 if osascript -e 'tell application "System Events" to return (UI elements enabled)' 2>/dev/null | grep -qi true; then
