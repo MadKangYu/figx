@@ -895,7 +895,7 @@ export_tokens() {
 # Uses /v1/images REST endpoint. For multi-mode (Pep/Cer), run twice after toggling
 # the collection mode in Figma Desktop (Professional plan) or via REST (Enterprise).
 export_frames() {
-  local section="" ids="" out="" fmt="jpg" scale="1" mode_label=""
+  local section="" ids="" out="" fmt="jpg" scale="1" mode_label="" modes=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --section) section="$2"; shift 2 ;;
@@ -904,10 +904,31 @@ export_frames() {
       --fmt) fmt="$2"; shift 2 ;;
       --scale) scale="$2"; shift 2 ;;
       --mode-label) mode_label="$2"; shift 2 ;;
+      --modes) modes="$2"; shift 2 ;;
       *) shift ;;
     esac
   done
   [ -n "$out" ] || die "export frames: --out DIR required"
+
+  # Interactive multi-mode loop: prompt user to toggle collection mode between exports
+  if [ -n "$modes" ]; then
+    local IFS=','; local -a mode_arr=($modes); unset IFS
+    local first=1
+    for m in "${mode_arr[@]}"; do
+      if [ $first -eq 1 ]; then
+        echo "→ ensure Figma Desktop is showing the '$m' mode for Color/SKU, then press Enter..." >&2
+      else
+        echo "→ toggle Color/SKU to '$m' mode in Figma Desktop, then press Enter..." >&2
+      fi
+      read -r _
+      local -a args=(--out "$out" --fmt "$fmt" --scale "$scale" --mode-label "$m")
+      [ -n "$section" ] && args+=(--section "$section")
+      [ -n "$ids" ] && args+=(--ids "$ids")
+      export_frames "${args[@]}"
+      first=0
+    done
+    return 0
+  fi
   local file_key; file_key="$(files_resolve_key)"
   local target_dir="$out"
   [ -n "$mode_label" ] && target_dir="$out/$mode_label"
