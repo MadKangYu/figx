@@ -11,6 +11,7 @@ Severity rubric: 🔴 blocks core use · 🟡 workaround needed · 🟢 minor
 ## Dependency / supply chain
 
 ### 🔴 npm package removal or hijack
+
 `npx -y @vkhanhqui/figma-mcp-go@latest` fetches every session.
 Unpublish, namespace takeover, or a malicious publish would immediately
 hit users.
@@ -21,12 +22,14 @@ hit users.
   and fall back to it if `npx` fails.
 
 ### 🟡 `@latest` version drift
+
 Upstream pushes a breaking change, every figx user sees it.
 
 - Mitigation: track upstream in `CHANGELOG.md`; pin in the next figx
   release.
 
 ### 🟡 Plugin release deletion
+
 `gh release download` in `bootstrap.sh` pulls `plugin.zip` by tag.
 If upstream deletes the release, fresh installs fail.
 
@@ -35,6 +38,7 @@ If upstream deletes the release, fresh installs fail.
   ship it from our repo.
 
 ### 🔴 Single-maintainer abandonment
+
 One person owns both the plugin and the MCP server.
 
 - Mitigation: fork policy — if no activity for 90 days we fork to
@@ -43,6 +47,7 @@ One person owns both the plugin and the MCP server.
 ## Figma Desktop / Plugin API
 
 ### 🔴 Plugin manifest `api: "1.0.0"` deprecation
+
 Figma supports an evolving plugin API; old `api` versions eventually
 expire.
 
@@ -50,6 +55,7 @@ expire.
   upstream bumps to. Pinned to upstream releases.
 
 ### 🟡 Development plugin policy tightening
+
 Figma could restrict sideloaded dev plugins (require signing, a
 developer account, or marketplace submission).
 
@@ -57,6 +63,7 @@ developer account, or marketplace submission).
   as a backup distribution channel.
 
 ### 🟡 "Hot reload plugin" causing mid-operation restarts
+
 The `Plugins → Development → 핫 리로드 플러그인` checkbox, if on,
 reloads the plugin whenever its code changes — mid-POST inconsistency.
 
@@ -64,6 +71,7 @@ reloads the plugin whenever its code changes — mid-POST inconsistency.
   could query plugin state in a future release.
 
 ### 🟢 Menu locale drift
+
 Figma may add locales we haven't enumerated (e.g. es / pt / vi /
 ru variants of "Plugins").
 
@@ -71,6 +79,7 @@ ru variants of "Plugins").
   `pluginMenuNames` / `devMenuNames` in `figma` if needed.
 
 ### 🟡 Profile reset wipes Development plugin list
+
 Figma profile v39 stores the imported manifest path. A forced reset
 loses it.
 
@@ -80,6 +89,7 @@ loses it.
 ## Runtime / networking
 
 ### 🔴 Port 1994 conflict
+
 Hard-coded on the plugin side. Another local service or an old
 figma-mcp-go process holding the port prevents handshake.
 
@@ -87,21 +97,24 @@ figma-mcp-go process holding the port prevents handshake.
   parameterize when upstream supports it.
 
 ### 🟡 Corporate firewall blocks loopback
+
 Some managed Macs block `127.0.0.1:1994` via network extensions.
 
 - Mitigation: surfaced in `figx permissions` (outbound + loopback
   checks).
 
 ### 🟡 Concurrent WebSocket clients
+
 Claude Code + Codex + OpenCode all connecting to the single plugin
 WS simultaneously — the plugin may only serve one client cleanly.
 
 - Mitigation: document "one agent at a time"; run `figx plugin
-  status` before switching tools.
+status` before switching tools.
 
 ## Response size
 
 ### 🟡 Tool results over 20 KB
+
 `get_design_context` on large Figma files can return >20 KB and get
 truncated by the MCP client.
 
@@ -113,6 +126,7 @@ truncated by the MCP client.
 ## Trust / verification
 
 ### 🟡 Plugin asset not integrity-verified
+
 `bootstrap.sh` trusts whatever `gh release download` gives us. If
 GitHub were MITM'd (unlikely but) or the release asset swapped, we
 install it anyway.
@@ -121,6 +135,7 @@ install it anyway.
   `bootstrap.sh` and verify before extracting.
 
 ### 🟢 npm supply-chain tooling
+
 `npx` runs any postinstall scripts. The MCP server is JS, not
 sandboxed.
 
@@ -130,6 +145,7 @@ sandboxed.
 ## Platform lock-in
 
 ### 🟡 macOS-only
+
 `figx plugin open` uses AppleScript System Events. Linux / Windows
 users have no menu automation.
 
@@ -145,17 +161,17 @@ users have no menu automation.
 - `figx doctor` + `figx permissions` + `figx plugin status`: triage
   surface for 90% of the listed issues.
 - Independent path: if figma-mcp-go fails completely, `figx export
-  tokens --fmt tokens.studio.json` still produces a file the Tokens
+tokens --fmt tokens.studio.json` still produces a file the Tokens
   Studio plugin can consume. No single point of failure for the
   token publish pipeline.
 
 ## Next actions on this list
 
-| Priority | Work | Where |
-|---|---|---|
-| 🔴 | Pin upstream version | `bootstrap.sh`, `lib/hermes.sh` |
-| 🔴 | Vendor `plugin.zip` at known SHA | `assets/vendor/` |
-| 🟡 | SHA256 verify on plugin download | `bootstrap.sh` |
-| 🟡 | Fork plan if abandoned | this doc, renewed quarterly |
-| 🟡 | Extended locale menu names | `figma` script |
-| 🟢 | Linux / Windows variant | v0.2 roadmap |
+| Priority | Work                             | Where                           |
+| -------- | -------------------------------- | ------------------------------- |
+| 🔴       | Pin upstream version             | `bootstrap.sh`, `lib/hermes.sh` |
+| 🔴       | Vendor `plugin.zip` at known SHA | `assets/vendor/`                |
+| 🟡       | SHA256 verify on plugin download | `bootstrap.sh`                  |
+| 🟡       | Fork plan if abandoned           | this doc, renewed quarterly     |
+| 🟡       | Extended locale menu names       | `figma` script                  |
+| 🟢       | Linux / Windows variant          | v0.2 roadmap                    |

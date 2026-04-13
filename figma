@@ -250,15 +250,26 @@ cmd_plugin() {
 plugin_install() {
   local src="${1:-$HOME/Projects/figma-mcp-learning/plugins/figma-mcp-go/plugin}"
   [ -f "$src/manifest.json" ] || die "manifest.json not found at $src"
-  echo "→ Figma dev plugin source ready: $src/manifest.json"
-  echo "  Import once in Figma Desktop:"
-  echo "  Plugins → Development → Import plugin from manifest → select:"
-  echo "  $src/manifest.json"
-  # Try the URL scheme (best-effort; Figma may or may not support it)
-  if command -v open >/dev/null 2>&1; then
-    open "figma://plugins/import?manifest=$src/manifest.json" 2>/dev/null || true
+  echo "→ Figma dev plugin manifest: $src/manifest.json"
+  if ! pgrep -x Figma >/dev/null 2>&1; then
+    open -a Figma 2>/dev/null || die "Figma Desktop not installed"
+    sleep 2
   fi
-  hermes_notify "figma-cli: plugin install initiated ($src/manifest.json)" || true
+  local script="$FIGMA_CLI_ROOT/tools/auto-import-plugin.applescript"
+  if [ -f "$script" ]; then
+    echo "→ automating: Plugins → 개발 → 매니페스트에서 플러그인 가져오기…"
+    if osascript "$script" "$src/manifest.json"; then
+      echo "✓ import sequence dispatched"
+      echo "  (if Figma asks for confirmation, accept it)"
+    else
+      echo "✗ automated import failed — fall back to manual:"
+      echo "  Plugins → Development → Import plugin from manifest → $src/manifest.json"
+    fi
+  else
+    echo "  auto-import script missing — do it manually:"
+    echo "  Plugins → Development → Import plugin from manifest → $src/manifest.json"
+  fi
+  hermes_notify "figx: plugin install dispatched ($src/manifest.json)" || true
 }
 
 plugin_run() {

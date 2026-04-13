@@ -50,17 +50,34 @@ else
   fi
 fi
 
-# 3. figma-mcp-go plugin release
-say "fetching figma-mcp-go plugin from GitHub release"
+# 3. figma-mcp-go plugin release — always pin to the current latest tag
+latest_tag="$(gh release list --repo "$PLUGIN_REPO" --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null)"
+if [ -z "$latest_tag" ]; then
+  warn "could not resolve latest release; retrying with implicit latest"
+  latest_tag="latest"
+fi
+say "fetching figma-mcp-go plugin $latest_tag"
 mkdir -p "$PLUGIN_DIR"
 tmpzip="$(mktemp -t fmg.XXXXXX.zip)"
-gh release download --repo "$PLUGIN_REPO" --pattern 'plugin.zip' --output "$tmpzip" --clobber
+if [ "$latest_tag" = "latest" ]; then
+  gh release download --repo "$PLUGIN_REPO" --pattern 'plugin.zip' --output "$tmpzip" --clobber
+else
+  gh release download "$latest_tag" --repo "$PLUGIN_REPO" --pattern 'plugin.zip' --output "$tmpzip" --clobber
+fi
 unzip -o -q "$tmpzip" -d "$PLUGIN_DIR"
 rm -f "$tmpzip"
 if [ -f "$PLUGIN_DIR/plugin/manifest.json" ]; then
-  say "plugin manifest: $PLUGIN_DIR/plugin/manifest.json"
+  say "plugin manifest: $PLUGIN_DIR/plugin/manifest.json (version $latest_tag)"
 else
   die "manifest.json not found after unzip — check release asset"
+fi
+
+# 3b. Auto-import the manifest into Figma Desktop (needs Figma running)
+if pgrep -x Figma >/dev/null 2>&1; then
+  say "auto-importing plugin manifest into Figma Desktop"
+  "$BIN_DIR/figx" plugin install "$PLUGIN_DIR/plugin" || warn "auto-import failed; do it manually once"
+else
+  warn "Figma Desktop not running; open any file then run: figx plugin install"
 fi
 
 # 4. MCP server warm-up (triggers npm cache install)
