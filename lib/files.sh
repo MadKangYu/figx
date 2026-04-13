@@ -8,11 +8,13 @@ _config_get() {
 }
 
 _config_set() {
+  # BSD sed on macOS doesn't support \s; use [[:space:]] or literal space.
   local key="$1" val="$2"
   mkdir -p "$(dirname "$FIGMA_CLI_CONFIG")"
   touch "$FIGMA_CLI_CONFIG"
-  if grep -q "^$key\s*=" "$FIGMA_CLI_CONFIG" 2>/dev/null; then
-    sed -i.bak "s|^$key\s*=.*|$key = \"$val\"|" "$FIGMA_CLI_CONFIG" && rm -f "$FIGMA_CLI_CONFIG.bak"
+  if grep -qE "^${key}[[:space:]]*=" "$FIGMA_CLI_CONFIG" 2>/dev/null; then
+    sed -i.bak -E "s|^${key}[[:space:]]*=.*|${key} = \"${val}\"|" "$FIGMA_CLI_CONFIG" \
+      && rm -f "$FIGMA_CLI_CONFIG.bak"
   else
     printf '%s = "%s"\n' "$key" "$val" >>"$FIGMA_CLI_CONFIG"
   fi
