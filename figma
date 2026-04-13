@@ -20,6 +20,8 @@
 #   export tokens [--fmt dtcg|css] [--out <file>]
 #   doctor                            # Environment self-check
 #   permissions                       # macOS privacy permission audit
+#   images prep <dir> [--out <d>]     # HEIC→JPG, downscale >4096px, re-encode
+#                                     # for clean Finder→Figma drag-and-drop
 #
 # Failure policy: never leave orphaned state. Every command exits non-zero on
 # the first real error. Every action emits a Hermes event (best-effort).
@@ -576,6 +578,13 @@ main() {
       esac
       ;;
     onboarding|start|init) onboarding_run ;;
+    images)
+      local sub="${1:-prep}"; shift || true
+      case "$sub" in
+        prep) "$FIGMA_CLI_ROOT/tools/image-prep.sh" "$@" ;;
+        *) die "images: unknown subcommand '$sub' (prep)" ;;
+      esac
+      ;;
     auth)     cmd_auth "$@" ;;
     files)    cmd_files "$@" ;;
     vars)     cmd_vars "$@" ;;
