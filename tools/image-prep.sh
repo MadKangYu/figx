@@ -45,7 +45,7 @@ prep_one() {
   local dest_ext="jpg"
 
   # Convert HEIC/HEIF to JPG straightaway
-  case "${ext:l}" in
+  case "$(echo "$ext" | tr '[:upper:]' '[:lower:]')" in
     heic|heif) sips -s format jpeg "$in" --out "$tmp" >/dev/null 2>&1 ;;
     png)       cp "$in" "$tmp"; dest_ext="png" ;;
     jpg|jpeg)  cp "$in" "$tmp" ;;
@@ -77,7 +77,9 @@ if [ -d "$src" ]; then
   # shellcheck disable=SC2044
   for f in "$src"/*; do
     [ -f "$f" ] || continue
-    case "${f:l}" in *.heic|*.heif|*.png|*.jpg|*.jpeg|*.webp|*.gif) prep_one "$f"; count=$((count+1)) ;; esac
+    case "$(echo "$f" | tr '[:upper:]' '[:lower:]')" in
+      *.heic|*.heif|*.png|*.jpg|*.jpeg|*.webp|*.gif) prep_one "$f"; count=$((count+1)) ;;
+    esac
   done
   echo "→ $count image(s) written to $out"
 else

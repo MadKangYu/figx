@@ -254,6 +254,8 @@ copilot, vscode-figma-mcp-helper, and more — see
 - [Integrations](docs/INTEGRATIONS.md) — Vercel, v0, Claude Code, Codex, OpenCode, Hermes
 - [Automation](docs/AUTOMATION.md) — one-command docs sync
 - [Pro workflows](docs/PRO-WORKFLOWS.md) — how expert teams actually ship with Figma
+- [World-class teams](docs/WORLD-CLASS-TEAMS.md) — Shopify, GitHub, Spotify, Vercel, Atlassian, Airbnb, Stripe patterns
+- [Image upload](docs/IMAGE-UPLOAD.md) — Finder → Figma without broken HEIC / oversize files
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — common failure dictionary
 - [Risk register](docs/RISKS-FIGMA-MCP-GO.md) — predicted failure modes of upstream
 - [Is figx really a CLI?](docs/WHAT-IS-A-CLI.md) — yes, and why
