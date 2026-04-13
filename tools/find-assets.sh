@@ -109,10 +109,14 @@ if [ "${#found[@]}" -eq 0 ]; then
 fi
 printf '%s\n' "${found[@]}" \
   | awk '!seen[$0]++' \
-  | xargs -I{} stat -f '%m\t{}' {} 2>/dev/null \
-  | sort -rn \
+  | while IFS= read -r p; do
+      [ -f "$p" ] || continue
+      mt=$(stat -f '%m' "$p" 2>/dev/null || echo 0)
+      printf '%s|%s\n' "$mt" "$p"
+    done \
+  | sort -rn -t '|' -k1,1 \
   | head -n "$limit" \
-  | cut -f2-
+  | awk -F'|' '{for(i=2;i<=NF;i++) printf "%s%s", $i, (i<NF?"|":""); print ""}'
 
 if [ "$open_finder" = 1 ] && command -v open >/dev/null 2>&1; then
   printf '%s\n' "${found[@]}" | awk '!seen[$0]++' | head -n "$limit" | while read -r p; do
