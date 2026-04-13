@@ -511,7 +511,7 @@ files_verify() {
   else
     echo "  ✓ team-scoped file (project/folder: $folder)"
   fi
-  hermes_notify "figx: verified file $key (team=$has_team)" || true
+  hermes_notify "figx: verified file $key (folder=$folder)" || true
 }
 
 cmd_vars() {
