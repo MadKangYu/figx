@@ -20,6 +20,11 @@
 #     status:       probe WS port + manifest
 #   hermes {check|notify <msg>}       # Hermes sanity + ad-hoc notify
 #   export tokens [--fmt dtcg|css] [--out <file>]
+#   export frames --section NAME --out DIR [--fmt jpg|png|svg|pdf]
+#                                     [--scale 1|2|3|4] [--mode-label pep|cer]
+#                                     # For Pep/Cer both, toggle the Color/SKU mode
+#                                     # in Figma Desktop and rerun with different
+#                                     # --mode-label each time (see Phase 8 docs).
 #   doctor                            # Environment self-check
 #   permissions                       # macOS privacy permission audit
 #   images prep <dir> [--out <d>]     # HEIC→JPG, downscale >4096px, re-encode
@@ -855,7 +860,14 @@ cmd_hermes() {
 
 cmd_export() {
   local kind="${1:-tokens}"; shift || true
-  [ "$kind" = "tokens" ] || die "export: only 'tokens' supported"
+  case "$kind" in
+    tokens) export_tokens "$@" ;;
+    frames) export_frames "$@" ;;
+    *) die "export: unknown kind '$kind' (tokens|frames)" ;;
+  esac
+}
+
+export_tokens() {
   local fmt="dtcg" out=""
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -873,9 +885,64 @@ cmd_export() {
       .meta.variables // {} | to_entries[] |
       "--\(.value.name | gsub("/";"-") | ascii_downcase): \(.value.valuesByMode | to_entries[0].value | tostring);"
     ')" ;;
-    *) die "export: unsupported --fmt '$fmt'" ;;
+    *) die "export tokens: unsupported --fmt '$fmt'" ;;
   esac
   if [ -n "$out" ]; then echo "$json" >"$out"; echo "→ wrote $out"; else echo "$json"; fi
+}
+
+# export frames — render Figma frames to images
+#   figx export frames --section "NAME" --out dir/ [--fmt jpg] [--scale 1] [--mode-label pep]
+# Uses /v1/images REST endpoint. For multi-mode (Pep/Cer), run twice after toggling
+# the collection mode in Figma Desktop (Professional plan) or via REST (Enterprise).
+export_frames() {
+  local section="" ids="" out="" fmt="jpg" scale="1" mode_label=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --section) section="$2"; shift 2 ;;
+      --ids) ids="$2"; shift 2 ;;
+      --out) out="$2"; shift 2 ;;
+      --fmt) fmt="$2"; shift 2 ;;
+      --scale) scale="$2"; shift 2 ;;
+      --mode-label) mode_label="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  [ -n "$out" ] || die "export frames: --out DIR required"
+  local file_key; file_key="$(files_resolve_key)"
+  local target_dir="$out"
+  [ -n "$mode_label" ] && target_dir="$out/$mode_label"
+  mkdir -p "$target_dir"
+
+  if [ -z "$ids" ] && [ -n "$section" ]; then
+    echo "→ resolving frames under section '$section'..." >&2
+    local doc; doc="$(api_get "/v1/files/$file_key?depth=4")"
+    ids="$(echo "$doc" | jq -r --arg s "$section" '
+      [.. | objects | select(.type=="SECTION" and .name==$s) | .children[]?
+        | select(.type=="FRAME" or .type=="COMPONENT" or .type=="COMPONENT_SET")
+        | .id] | join(",")
+    ')"
+    [ -n "$ids" ] || die "export frames: no frames found under section '$section'"
+    echo "→ matched $(echo "$ids" | tr ',' '\n' | wc -l | tr -d ' ') frames" >&2
+  fi
+  [ -n "$ids" ] || die "export frames: --section NAME or --ids ID,ID,... required"
+
+  echo "→ requesting images ($fmt, scale=$scale)..." >&2
+  local resp; resp="$(api_get "/v1/images/$file_key?ids=$ids&format=$fmt&scale=$scale")"
+  local err; err="$(echo "$resp" | jq -r '.err // empty')"
+  [ -z "$err" ] || die "export frames: Figma API error: $err"
+
+  local name_map; name_map="$(api_get "/v1/files/$file_key/nodes?ids=$ids" \
+    | jq -r '.nodes | to_entries[] | "\(.key)\t\(.value.document.name)"')"
+  local count=0
+  while IFS=$'\t' read -r nid nname; do
+    [ -n "$nid" ] || continue
+    local url; url="$(echo "$resp" | jq -r --arg k "$nid" '.images[$k] // empty')"
+    [ -n "$url" ] || { echo "  skip $nid (no url)" >&2; continue; }
+    local safe; safe="$(echo "$nname" | tr '/ ' '__' | tr -cd 'A-Za-z0-9_.-')"
+    local file="$target_dir/${safe}.${fmt}"
+    curl -fsSL -o "$file" "$url" && count=$((count + 1)) && echo "  ✓ $file" >&2 || echo "  ✗ $nid" >&2
+  done <<< "$name_map"
+  echo "→ exported $count frames to $target_dir" >&2
 }
 
 main() {
