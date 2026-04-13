@@ -45,12 +45,16 @@ Sources: help.figma.com, developers.figma.com, direct UI verification.
 
 ## E. Desktop app
 
-| #   | Setting                 | Where                     | Required value                                | Why                             |
-| --- | ----------------------- | ------------------------- | --------------------------------------------- | ------------------------------- |
-| E1  | Figma Desktop installed | `/Applications/Figma.app` | Current version                               | Plugins require Desktop         |
-| E2  | Desktop language        | Figma → Preferences       | Any supported; figx detects EN + KO + JA + ZH | Menu name variance              |
-| E3  | Dev Mode toggle         | top-right `</>`           | Either state OK — figx auto-detects           | Plugin menus differ subtly      |
-| E4  | Hot-reload plugin       | Plugins → Development     | **Off** during token publish                  | Prevents mid-operation restarts |
+| #   | Setting                 | Where                                     | Required value                                | Why                                                              |
+| --- | ----------------------- | ----------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------- |
+| E1  | Figma Desktop installed | `/Applications/Figma.app`                 | Current version                               | Plugins require Desktop                                          |
+| E2  | Desktop language        | Figma → Preferences                       | Any supported; figx detects EN + KO + JA + ZH | Menu name variance                                               |
+| E3  | Dev Mode toggle         | top-right `</>`                           | Either state OK — figx auto-detects           | Plugin menus differ subtly                                       |
+| E4  | Hot-reload plugin       | Plugins → Development                     | **Off** during token publish                  | Prevents mid-operation restarts                                  |
+| E5  | Dev Mode code language  | 기본 설정 → 언어 / Preferences → Language | **CSS** for web work; iOS/Android as needed   | Determines Inspect-panel output format                           |
+| E6  | Canvas units            | 기본 설정 → 단위                          | **Pixels**                                    | Token math + figx export all assume px                           |
+| E7  | Open links in Desktop   | 기본 설정 → 데스크톱 앱에서 링크 열기     | **Enabled** (✓)                               | `figx files open` / `figma://` URLs land in Desktop, not browser |
+| E8  | Accessibility prefs     | 기본 설정 → 접근성 설정                   | Set as needed (motion, contrast)              | Surfaces the same constraints designers must hit                 |
 
 ## F. Plugins (inside Figma)
 
