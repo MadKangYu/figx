@@ -200,6 +200,14 @@ cmd_files() {
     set)     files_set "$@" ;;
     open)    files_open "$@" ;;
     verify)  files_verify "$@" ;;
+    mode)
+      local msub="${1:-detect}"; shift || true
+      case "$msub" in
+        detect) mode_detect ;;
+        set)    mode_set "$@" ;;
+        *) die "files mode: unknown subcommand '$msub' (detect|set)" ;;
+      esac
+      ;;
     team)
       local tsub="${1:-list}"; shift || true
       case "$tsub" in
