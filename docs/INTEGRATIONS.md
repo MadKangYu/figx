@@ -68,6 +68,66 @@ Same `~/.mcp.json` as Claude Code.
 figx plugin register-mcp all
 ```
 
+## Chrome DevTools Protocol (CDP) — OpenChrome MCP
+
+Some design references sit behind logins, SPAs, or ephemeral state
+that the official Figma + v0 pipelines can't read directly. CDP
+closes the gap: a real Chromium instance you control from the
+terminal or from an agent, with full cookie / session awareness.
+
+### Setup (once)
+
+- A dedicated Chrome profile for automation lives at
+  `~/.chrome-cdp/primary` with the CDP endpoint on `127.0.0.1:9223`.
+- The **OpenChrome MCP** server (`mcp__openchrome__*` tools) is the
+  canonical programmatic interface — navigate, read_page, inspect,
+  fill_form, take_screenshot, etc.
+- Status file: `~/.chrome-cdp/active-session.json` (session truth).
+
+### Patterns that pair with figx
+
+1. **Competitor detail-page harvesting.**
+   Agent opens a paid / login-walled product page via OpenChrome,
+   `read_page` to pull the rendered DOM, then
+   `generate_figma_design` (official Figma MCP) to seed a Figma
+   layout.
+
+2. **Design reference ingestion.**
+   `mcp__openchrome__navigate` → load a reference site → `inspect`
+   and `get_screenshot` → feed the screenshot into figma-mcp-go's
+   `import_image` on the target frame. See also
+   [`IMAGE-UPLOAD.md`](IMAGE-UPLOAD.md) for size / format pre-prep.
+
+3. **OAuth / PAT flows.**
+   When a service doesn't expose a headless auth path, OpenChrome
+   drives the browser click-path and `storage` / `cookies` tools
+   capture the resulting session. figx never sees the password —
+   only the PAT that Keychain ends up with.
+
+4. **Dev-Mode screenshot diffs.**
+   Open the same Figma Dev-Mode URL at two timestamps; diff the
+   screenshots to spot unintended drift before a publish.
+
+### When to reach for CDP vs the official Figma MCP
+
+| Task                                 | Tool                                                 |
+| ------------------------------------ | ---------------------------------------------------- |
+| Read a public Figma file             | `mcp__figma__get_design_context`                     |
+| Generate code from Figma             | official Figma MCP + v0                              |
+| Load a login-walled page             | OpenChrome                                           |
+| Interact with an SPA (wait for JS)   | OpenChrome (`wait_for`, `javascript_tool`)           |
+| Upload a CDP-captured image to Figma | figma-mcp-go `import_image` after `figx images prep` |
+
+### Safety
+
+- CDP gives full browser control — treat the `~/.chrome-cdp/primary`
+  profile as trusted, not a scratch pad. Don't install extensions
+  you wouldn't run on your main browser.
+- Session state lives in that profile; rotate cookies the same way
+  you rotate PATs (every 90 days minimum).
+- `figx permissions` surfaces loopback reachability; if the CDP
+  endpoint can't bind to 9223, networking is the first check.
+
 ## Supabase
 
 Optional but handy for teams without Enterprise Figma. The pattern:
