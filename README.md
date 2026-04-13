@@ -30,7 +30,7 @@ single hybrid pipeline that:
   execution), and emits W3C DTCG + CSS + Tokens Studio payloads in one
   pass.
 - **Launches the Figma plugin for you**, clicking `Plugins → 개발 →
-  Figma MCP Go` through a locale-independent AppleScript menu
+Figma MCP Go` through a locale-independent AppleScript menu
   traversal. No Quick Actions, no lost focus.
 - **Keeps secrets in the Keychain**, validates before storing, and
   refuses to retry 401/403 so you never burn through a 90-day PAT
@@ -38,6 +38,14 @@ single hybrid pipeline that:
 - **Talks to Hermes-Agent** on every event — starts, successes,
   failures — so your phone pings when a publish finishes even if you
   walked away.
+
+## Architecture at a glance
+
+[![hybrid pipeline](https://img.shields.io/badge/open%20in-Excalidraw-6965db?style=flat)](https://excalidraw.com/#json=_ZstONCsu_jsD2-83qhQ3,8REr9ToG-GU9R52HdA8dYA)
+
+Drop-in editable diagram at
+[`assets/diagrams/figx-architecture.excalidraw`](assets/diagrams/figx-architecture.excalidraw)
+or open the live link above.
 
 ## Core features in action
 
@@ -121,13 +129,13 @@ the same time**. figx makes that trivial.
    figx hermes notify ──────────► Hermes ──► Telegram / Slack / Discord
 ```
 
-| Step | Tool | What you type |
-|---|---|---|
-| Extract tokens from code | `figx` / `tools/extract_from_py.py` | `figx export tokens --fmt dtcg` |
-| Push to Variables (Pep/Cer) | Tokens Studio for Figma | plugin UI, once |
-| Create Styles / Components | figma-mcp-go via MCP | agent calls after `figx plugin open` |
-| Publish library | manual + polled | `figx publish` |
-| Notify / audit | Hermes webhook | automatic |
+| Step                        | Tool                                | What you type                        |
+| --------------------------- | ----------------------------------- | ------------------------------------ |
+| Extract tokens from code    | `figx` / `tools/extract_from_py.py` | `figx export tokens --fmt dtcg`      |
+| Push to Variables (Pep/Cer) | Tokens Studio for Figma             | plugin UI, once                      |
+| Create Styles / Components  | figma-mcp-go via MCP                | agent calls after `figx plugin open` |
+| Publish library             | manual + polled                     | `figx publish`                       |
+| Notify / audit              | Hermes webhook                      | automatic                            |
 
 Enterprise users can substitute step 2 with `figx vars apply` (Variables
 REST). Everyone else goes through Tokens Studio — same end state.
@@ -173,17 +181,17 @@ First-time users: `figx onboarding` walks the 7 preconditions
 
 ## Command surface
 
-| Command | Purpose |
-|---|---|
-| `figx version` / `figx doctor` / `figx onboarding` | environment + guided setup |
-| `figx auth {login,status,logout}` | Keychain-backed PAT management |
-| `figx files {current,set,find,list}` | file-key discovery |
-| `figx vars {get,dump,apply}` | Variables read / write (write = Enterprise only) |
-| `figx publish` | guided manual publish, polls `/variables/published` up to 20 min |
-| `figx devmode` | file metadata + Dev Resources |
-| `figx export tokens --fmt {dtcg,css}` | W3C DTCG / CSS custom properties |
-| `figx plugin {install,open,run,status}` | figma-mcp-go plugin management |
-| `figx hermes {check,notify}` | Hermes version + ad-hoc webhook push |
+| Command                                            | Purpose                                                          |
+| -------------------------------------------------- | ---------------------------------------------------------------- |
+| `figx version` / `figx doctor` / `figx onboarding` | environment + guided setup                                       |
+| `figx auth {login,status,logout}`                  | Keychain-backed PAT management                                   |
+| `figx files {current,set,find,list}`               | file-key discovery                                               |
+| `figx vars {get,dump,apply}`                       | Variables read / write (write = Enterprise only)                 |
+| `figx publish`                                     | guided manual publish, polls `/variables/published` up to 20 min |
+| `figx devmode`                                     | file metadata + Dev Resources                                    |
+| `figx export tokens --fmt {dtcg,css}`              | W3C DTCG / CSS custom properties                                 |
+| `figx plugin {install,open,run,status}`            | figma-mcp-go plugin management                                   |
+| `figx hermes {check,notify}`                       | Hermes version + ad-hoc webhook push                             |
 
 Deeper reference: [`docs/CLI.md`](docs/CLI.md).
 

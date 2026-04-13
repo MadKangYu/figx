@@ -1,0 +1,68 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "hermes-agent",
+  "elements": [
+    {"type":"text","id":"title","x":520,"y":40,"width":360,"height":40,"text":"figx — Hybrid Figma Pipeline","fontSize":28,"fontFamily":1,"textAlign":"center","strokeColor":"#1e1e1e"},
+    {"type":"text","id":"subtitle","x":440,"y":85,"width":520,"height":22,"text":"code → figx → Figma Variables / Styles / Components (Professional+)","fontSize":14,"fontFamily":1,"textAlign":"center","strokeColor":"#6b7280"},
+
+    {"type":"rectangle","id":"ss-box","x":80,"y":180,"width":240,"height":120,"backgroundColor":"#f1f3f5","fillStyle":"solid","roundness":{"type":3},"strokeColor":"#495057"},
+    {"type":"text","id":"ss-title","x":96,"y":196,"width":208,"height":24,"text":"Source of truth","fontSize":16,"fontFamily":1,"strokeColor":"#212529"},
+    {"type":"text","id":"ss-code","x":96,"y":228,"width":208,"height":60,"text":"make_pdp.py\nPAD · SIZE · LH\nPALETTE · HL · COLORS","fontSize":12,"fontFamily":3,"strokeColor":"#495057"},
+
+    {"type":"rectangle","id":"figx-box","x":540,"y":170,"width":320,"height":180,"backgroundColor":"#fff3bf","fillStyle":"solid","roundness":{"type":3},"strokeColor":"#f08c00","strokeWidth":2},
+    {"type":"text","id":"figx-title","x":556,"y":186,"width":288,"height":28,"text":"figx CLI","fontSize":20,"fontFamily":1,"strokeColor":"#f08c00"},
+    {"type":"text","id":"figx-sub","x":556,"y":222,"width":288,"height":18,"text":"~/.local/bin/figx","fontSize":11,"fontFamily":3,"strokeColor":"#5c4400"},
+    {"type":"text","id":"figx-cmds","x":556,"y":248,"width":288,"height":90,"text":"extract   auth   files   vars\nplugin open   publish   export\nhermes   devmode   doctor","fontSize":12,"fontFamily":3,"strokeColor":"#5c4400"},
+
+    {"type":"rectangle","id":"out1","x":390,"y":420,"width":180,"height":64,"backgroundColor":"#d0bfff","fillStyle":"solid","roundness":{"type":3},"strokeColor":"#5f3dc4"},
+    {"type":"text","id":"out1-t","x":410,"y":435,"width":140,"height":36,"text":"tokens.dtcg.json\nW3C standard","fontSize":12,"fontFamily":3,"strokeColor":"#3b1a8a","textAlign":"center"},
+
+    {"type":"rectangle","id":"out2","x":600,"y":420,"width":180,"height":64,"backgroundColor":"#b197fc","fillStyle":"solid","roundness":{"type":3},"strokeColor":"#5f3dc4"},
+    {"type":"text","id":"out2-t","x":620,"y":435,"width":140,"height":36,"text":"tokens.studio.json\nTokens Studio","fontSize":12,"fontFamily":3,"strokeColor":"#ffffff","textAlign":"center"},
+
+    {"type":"rectangle","id":"out3","x":810,"y":420,"width":180,"height":64,"backgroundColor":"#d0bfff","fillStyle":"solid","roundness":{"type":3},"strokeColor":"#5f3dc4"},
+    {"type":"text","id":"out3-t","x":830,"y":435,"width":140,"height":36,"text":"tokens.css\nweb code","fontSize":12,"fontFamily":3,"strokeColor":"#3b1a8a","textAlign":"center"},
+
+    {"type":"rectangle","id":"desktop","x":380,"y":560,"width":620,"height":230,"backgroundColor":"#e7f5ff","fillStyle":"solid","roundness":{"type":3},"strokeColor":"#1971c2","strokeWidth":2},
+    {"type":"text","id":"desktop-title","x":400,"y":576,"width":300,"height":24,"text":"Figma Desktop","fontSize":16,"fontFamily":1,"strokeColor":"#1971c2"},
+
+    {"type":"rectangle","id":"ts-plugin","x":420,"y":620,"width":240,"height":80,"backgroundColor":"#ffffff","fillStyle":"solid","roundness":{"type":3},"strokeColor":"#1971c2"},
+    {"type":"text","id":"ts-t","x":440,"y":632,"width":200,"height":22,"text":"Tokens Studio plugin","fontSize":13,"fontFamily":1,"strokeColor":"#0b5394"},
+    {"type":"text","id":"ts-d","x":440,"y":658,"width":200,"height":36,"text":"Load → Push\n→ Variables (Pep/Cer modes)","fontSize":11,"fontFamily":3,"strokeColor":"#1971c2"},
+
+    {"type":"rectangle","id":"mcp-plugin","x":700,"y":620,"width":280,"height":80,"backgroundColor":"#ffffff","fillStyle":"solid","roundness":{"type":3},"strokeColor":"#1971c2"},
+    {"type":"text","id":"mcp-t","x":720,"y":632,"width":240,"height":22,"text":"figma-mcp-go plugin","fontSize":13,"fontFamily":1,"strokeColor":"#0b5394"},
+    {"type":"text","id":"mcp-d","x":720,"y":658,"width":240,"height":36,"text":"MCP over ws://127.0.0.1:1994\n→ Styles / Components / Frames","fontSize":11,"fontFamily":3,"strokeColor":"#1971c2"},
+
+    {"type":"text","id":"open-label","x":420,"y":730,"width":580,"height":18,"text":"figx plugin open  —  AppleScript clicks Plugins → 개발 → Figma MCP Go","fontSize":11,"fontFamily":3,"strokeColor":"#343a40"},
+    {"type":"text","id":"open-detail","x":420,"y":752,"width":580,"height":18,"text":"(locale-independent menu traversal; no Quick Actions, no lost focus)","fontSize":10,"fontFamily":3,"strokeColor":"#868e96"},
+
+    {"type":"rectangle","id":"cloud","x":1080,"y":180,"width":240,"height":120,"backgroundColor":"#c3fae8","fillStyle":"solid","roundness":{"type":3},"strokeColor":"#0ca678"},
+    {"type":"text","id":"cloud-t","x":1096,"y":196,"width":208,"height":22,"text":"Figma Cloud","fontSize":14,"fontFamily":1,"strokeColor":"#0ca678"},
+    {"type":"text","id":"cloud-d","x":1096,"y":224,"width":208,"height":70,"text":"REST API\n/v1/files/:key/variables\n(write = Enterprise Full seat)","fontSize":11,"fontFamily":3,"strokeColor":"#087f5b"},
+
+    {"type":"rectangle","id":"hermes","x":540,"y":880,"width":320,"height":80,"backgroundColor":"#ffe3e3","fillStyle":"solid","roundness":{"type":3},"strokeColor":"#c92a2a"},
+    {"type":"text","id":"hermes-t","x":560,"y":896,"width":280,"height":22,"text":"Hermes Agent","fontSize":14,"fontFamily":1,"strokeColor":"#c92a2a"},
+    {"type":"text","id":"hermes-d","x":560,"y":922,"width":280,"height":32,"text":"webhook: figma-tokens →\nlog / Telegram / Slack / Discord","fontSize":11,"fontFamily":3,"strokeColor":"#8c1616"},
+
+    {"type":"arrow","id":"a1","x":320,"y":240,"width":220,"height":10,"points":[[0,0],[220,10]],"strokeColor":"#495057","startArrowhead":null,"endArrowhead":"arrow"},
+    {"type":"text","id":"a1t","x":355,"y":212,"width":150,"height":18,"text":"figx export","fontSize":11,"fontFamily":3,"strokeColor":"#495057"},
+
+    {"type":"arrow","id":"a2","x":620,"y":356,"width":-140,"height":60,"points":[[0,0],[-140,60]],"strokeColor":"#5f3dc4","endArrowhead":"arrow"},
+    {"type":"arrow","id":"a3","x":700,"y":356,"width":0,"height":60,"points":[[0,0],[0,60]],"strokeColor":"#5f3dc4","endArrowhead":"arrow"},
+    {"type":"arrow","id":"a4","x":780,"y":356,"width":140,"height":60,"points":[[0,0],[140,60]],"strokeColor":"#5f3dc4","endArrowhead":"arrow"},
+
+    {"type":"arrow","id":"a5","x":690,"y":490,"width":-150,"height":130,"points":[[0,0],[-150,130]],"strokeColor":"#1971c2","endArrowhead":"arrow"},
+    {"type":"arrow","id":"a5t","x":870,"y":530,"width":-30,"height":90,"points":[[0,0],[-30,90]],"strokeColor":"#868e96","endArrowhead":"arrow","strokeStyle":"dashed"},
+
+    {"type":"arrow","id":"a6","x":860,"y":240,"width":220,"height":10,"points":[[0,0],[220,10]],"strokeColor":"#0ca678","endArrowhead":"arrow"},
+    {"type":"text","id":"a6t","x":900,"y":216,"width":150,"height":18,"text":"figx vars (read)","fontSize":11,"fontFamily":3,"strokeColor":"#0ca678"},
+
+    {"type":"arrow","id":"a7","x":700,"y":810,"width":0,"height":70,"points":[[0,0],[0,70]],"strokeColor":"#c92a2a","endArrowhead":"arrow"},
+    {"type":"text","id":"a7t","x":710,"y":830,"width":200,"height":18,"text":"figx hermes notify","fontSize":11,"fontFamily":3,"strokeColor":"#c92a2a"}
+  ],
+  "appState": {
+    "viewBackgroundColor": "#ffffff"
+  }
+}
