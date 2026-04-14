@@ -860,6 +860,12 @@ tell application "System Events"
         if homeRaised then exit repeat
       end repeat
 
+      if homeRaised is false then
+        try
+          perform action "AXRaise" of window 1
+        end try
+      end if
+
       delay 0.5
       keystroke "/" using {command down}
       delay 0.6
