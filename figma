@@ -21,10 +21,11 @@
 #   hermes {check|notify <msg>}       # Hermes sanity + ad-hoc notify
 #   export tokens [--fmt dtcg|css] [--out <file>]
 #   export frames --section NAME --out DIR [--fmt jpg|png|svg|pdf]
+#   export frames --out DIR            # reads export_frame_ids from .figx/project.toml
 #                                     [--scale 1|2|3|4] [--mode-label pep|cer]
 #                                     # For Pep/Cer both, toggle the Color/SKU mode
 #                                     # in Figma Desktop and rerun with different
-#                                     # --mode-label each time (see Phase 8 docs).
+#                                     # --mode-label each time (or use --modes pep,cer).
 #   doctor                            # Environment self-check
 #   permissions                       # macOS privacy permission audit
 #   images prep <dir> [--out <d>]     # HEIC→JPG, downscale >4096px, re-encode
@@ -747,6 +748,22 @@ project_find() {
   return 1
 }
 
+project_config_get() {
+  local key="$1"
+  local root
+  root="$(project_find 2>/dev/null)" || return 1
+  local cfg="$root/.figx/project.toml"
+  [ -f "$cfg" ] || return 1
+  awk -v k="$key" -F'=' '
+    $1 ~ "^[[:space:]]*" k "[[:space:]]*$" {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
+      gsub(/^"|"$/, "", $2)
+      print $2
+      exit
+    }
+  ' "$cfg"
+}
+
 project_init() {
   local root="${1:-$PWD}"
   mkdir -p "$root/.figx"
@@ -756,6 +773,8 @@ name = "$(basename "$root")"
 tokens_src = "pdp_pipeline/make_pdp.py"
 tokens_out = "design-tokens"
 # figma_file_key = "XXXX"
+# export_section_name = "AMPLEN · 16 PDP Layouts"
+# export_frame_ids = "13:2,13:3,..."
 # hermes_webhook = "figma-tokens"
 TOML
   echo "✓ $root/.figx/project.toml created"
@@ -765,8 +784,9 @@ TOML
 
 plugin_open() {
   # Launch the already-imported figma-mcp-go plugin inside Figma Desktop.
-  # Locale-aware deterministic menu traversal via AppleScript System Events.
-  # Handles: Plugins/플러그인/プラグイン/插件, Development/개발/開発/开发.
+  # Prefer explicit top-bar menu traversal when available.
+  # If the current frontmost Figma surface is Home (no Plugins menu), fall back
+  # to Quick Actions from the Home window.
   if ! pgrep -x Figma >/dev/null 2>&1; then
     die "Figma Desktop not running — open the target file first"
   fi
@@ -778,6 +798,7 @@ if pluginName is "" then set pluginName to "Figma MCP Go"
 -- Locale candidates. Keep English first for the common case.
 set pluginMenuNames to {"Plugins", "플러그인", "プラグイン", "插件", "Plugins & widgets"}
 set devMenuNames to {"Development", "개발", "開発", "开发", "개발용", "Dev"}
+set homeWindowNames to {"Home", "홈"}
 
 tell application "Figma" to activate
 delay 0.4
@@ -786,7 +807,7 @@ tell application "System Events"
   tell process "Figma"
     set topNames to name of every menu bar item of menu bar 1
 
-    -- Locate plugin menu
+    -- Locate plugin menu first. This path is deterministic and preferred.
     set pluginMenu to missing value
     repeat with cand in pluginMenuNames
       if topNames contains (cand as text) then
@@ -794,37 +815,60 @@ tell application "System Events"
         exit repeat
       end if
     end repeat
-    if pluginMenu is missing value then
-      error "Plugins menu not found — top bar has: " & (topNames as text)
-    end if
 
-    click pluginMenu
-    delay 0.3
+    if pluginMenu is not missing value then
+      click pluginMenu
+      delay 0.3
 
-    -- Locate Development submenu
-    set devItem to missing value
-    tell menu 1 of pluginMenu
-      set subNames to name of every menu item
-      repeat with cand in devMenuNames
-        if subNames contains (cand as text) then
-          set devItem to menu item (cand as text)
-          exit repeat
+      -- Locate Development submenu
+      set devItem to missing value
+      tell menu 1 of pluginMenu
+        set subNames to name of every menu item
+        repeat with cand in devMenuNames
+          if subNames contains (cand as text) then
+            set devItem to menu item (cand as text)
+            exit repeat
+          end if
+        end repeat
+      end tell
+      if devItem is missing value then error "Development submenu not found"
+
+      click devItem
+      delay 0.3
+
+      tell menu 1 of devItem
+        if (name of every menu item) contains pluginName then
+          click menu item pluginName
+        else
+          error "Plugin '" & pluginName & "' not in Development submenu"
         end if
+      end tell
+    else
+      -- Home-first fallback: raise Home if present, then use Quick Actions.
+      set homeRaised to false
+      repeat with w in windows
+        set wname to name of w
+        repeat with cand in homeWindowNames
+          if wname is (cand as text) then
+            try
+              perform action "AXRaise" of w
+              set homeRaised to true
+            end try
+            exit repeat
+          end if
+        end repeat
+        if homeRaised then exit repeat
       end repeat
-    end tell
-    if devItem is missing value then error "Development submenu not found"
 
-    click devItem
-    delay 0.3
-
-    -- Click the plugin
-    tell menu 1 of devItem
-      if (name of every menu item) contains pluginName then
-        click menu item pluginName
-      else
-        error "Plugin '" & pluginName & "' not in Development submenu"
-      end if
-    end tell
+      delay 0.5
+      keystroke "/" using {command down}
+      delay 0.6
+      keystroke pluginName
+      delay 0.5
+      key code 36
+      delay 0.2
+      return
+    end if
   end tell
 end tell
 APPLESCRIPT
@@ -895,6 +939,7 @@ export_tokens() {
 
 # export frames — render Figma frames to images
 #   figx export frames --section "NAME" --out dir/ [--fmt jpg] [--scale 1] [--mode-label pep]
+#   figx export frames --out dir/        # uses .figx/project.toml export_frame_ids if present
 # Uses /v1/images REST endpoint. For multi-mode (Pep/Cer), run twice after toggling
 # the collection mode in Figma Desktop (Professional plan) or via REST (Enterprise).
 export_frames() {
@@ -936,6 +981,14 @@ export_frames() {
   local target_dir="$out"
   [ -n "$mode_label" ] && target_dir="$out/$mode_label"
   mkdir -p "$target_dir"
+
+  # Prefer stable project-pinned frame IDs over section names.
+  if [ -z "$ids" ]; then
+    ids="$(project_config_get export_frame_ids 2>/dev/null || true)"
+  fi
+  if [ -z "$section" ]; then
+    section="$(project_config_get export_section_name 2>/dev/null || true)"
+  fi
 
   if [ -z "$ids" ] && [ -n "$section" ]; then
     echo "→ resolving frames under section '$section'..." >&2
