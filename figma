@@ -7,7 +7,9 @@
 # Subcommands:
 #   auth {login|status|logout}
 #   files {list|find|current|set|open <key|url>|verify}
-#     open:   launch Figma Desktop directly to the file, then plugin open
+#     open:   open via workspace/home search by default using a project-stable
+#             open query (file/window title, not a page name); use --direct only
+#             when you explicitly want a figma://file deep link
 #     verify: check whether the file is in a paid team or personal Drafts
 #   vars  {get|apply <tokens.json>|dump <out.json>}
 #   publish [--file <key>]           # Prints instructions (REST has no publish endpoint)
@@ -26,6 +28,13 @@
 #                                     # For Pep/Cer both, toggle the Color/SKU mode
 #                                     # in Figma Desktop and rerun with different
 #                                     # --mode-label each time (or use --modes pep,cer).
+#   ui bounds [--app Figma] [--window-substr TEXT]
+#   ui screenshot --out FILE [--app Figma] [--window-substr TEXT]
+#   ui click --x N --y N [--double] [--absolute] [--app Figma] [--window-substr TEXT]
+#   ui space --number N            # switch Mission Control desktop via Ctrl+N
+#   ui ocr-find --text TEXT [--nth N] [--app Figma] [--window-substr TEXT]
+#   ui ocr-click --text TEXT [--nth N] [--dx N] [--dy N] [--double]
+#                                     [--app Figma] [--window-substr TEXT]
 #   doctor                            # Environment self-check
 #   permissions                       # macOS privacy permission audit
 #   images prep <dir> [--out <d>]     # HEIC→JPG, downscale >4096px, re-encode
@@ -190,6 +199,258 @@ cmd_permissions() {
   fi
 }
 
+ui_window_info() {
+  local app_name="${1:-Figma}"
+  local window_substr="${2:-}"
+  swift - "$app_name" "$window_substr" <<'SWIFT'
+import CoreGraphics
+import Foundation
+
+let appName = CommandLine.arguments[1]
+let needle = CommandLine.arguments[2].lowercased()
+let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+let infos = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
+
+for info in infos {
+    guard let owner = info[kCGWindowOwnerName as String] as? String, owner == appName else { continue }
+    let name = (info[kCGWindowName as String] as? String) ?? ""
+    if !needle.isEmpty && !name.lowercased().contains(needle) { continue }
+    guard let bounds = info[kCGWindowBounds as String] as? [String: Any],
+          let x = bounds["X"] as? Double,
+          let y = bounds["Y"] as? Double,
+          let w = bounds["Width"] as? Double,
+          let h = bounds["Height"] as? Double,
+          let wid = info[kCGWindowNumber as String] as? Int else { continue }
+    print("\(wid)\t\(name)\t\(Int(x))\t\(Int(y))\t\(Int(w))\t\(Int(h))")
+    exit(0)
+}
+
+fputs("No window matched '\(needle)' for app \(appName)\n", stderr)
+exit(1)
+SWIFT
+}
+
+ui_click_at() {
+  local ax="${1:-}" ay="${2:-}" double="${3:-0}"
+  [ -n "$ax" ] || die "ui click: missing x"
+  [ -n "$ay" ] || die "ui click: missing y"
+  swift - "$ax" "$ay" "$double" <<'SWIFT'
+import CoreGraphics
+import Foundation
+
+let x = Double(CommandLine.arguments[1])!
+let y = Double(CommandLine.arguments[2])!
+let doubleClick = Int(CommandLine.arguments[3]) == 1
+
+func post(_ type: CGEventType, clicks: Int64 = 1) {
+    guard let event = CGEvent(
+        mouseEventSource: nil,
+        mouseType: type,
+        mouseCursorPosition: CGPoint(x: x, y: y),
+        mouseButton: .left
+    ) else { return }
+    event.setIntegerValueField(.mouseEventClickState, value: clicks)
+    event.post(tap: .cghidEventTap)
+}
+
+post(.mouseMoved)
+usleep(20_000)
+post(.leftMouseDown, clicks: doubleClick ? 2 : 1)
+usleep(30_000)
+post(.leftMouseUp, clicks: doubleClick ? 2 : 1)
+if doubleClick {
+    usleep(60_000)
+    post(.leftMouseDown, clicks: 2)
+    usleep(30_000)
+    post(.leftMouseUp, clicks: 2)
+}
+SWIFT
+}
+
+cmd_ui() {
+  local sub="${1:-bounds}"; shift || true
+  local app_name="Figma" window_substr="" out="" x="" y="" double=0 absolute=0 text="" lang="kor+eng" nth="1" dx="0" dy="0" number=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --app) app_name="$2"; shift 2 ;;
+      --window-substr) window_substr="$2"; shift 2 ;;
+      --out) out="$2"; shift 2 ;;
+      --x) x="$2"; shift 2 ;;
+      --y) y="$2"; shift 2 ;;
+      --text) text="$2"; shift 2 ;;
+      --lang) lang="$2"; shift 2 ;;
+      --nth) nth="$2"; shift 2 ;;
+      --dx) dx="$2"; shift 2 ;;
+      --dy) dy="$2"; shift 2 ;;
+      --number) number="$2"; shift 2 ;;
+      --double) double=1; shift ;;
+      --absolute) absolute=1; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  case "$sub" in
+    space)
+      [ -n "$number" ] || die "ui space: --number N required"
+      local keycode=""
+      case "$number" in
+        1) keycode=18 ;;
+        2) keycode=19 ;;
+        3) keycode=20 ;;
+        4) keycode=21 ;;
+        5) keycode=23 ;;
+        6) keycode=22 ;;
+        7) keycode=26 ;;
+        8) keycode=28 ;;
+        9) keycode=25 ;;
+        *) die "ui space: unsupported desktop number '$number' (1-9)" ;;
+      esac
+      osascript -e 'tell application "System Events" to key code '"$keycode"' using {control down}'
+      echo "→ switched to Desktop $number"
+      return 0
+      ;;
+  esac
+
+  local info wid name wx wy ww wh
+  info="$(ui_window_info "$app_name" "$window_substr")" || die "ui: failed to resolve window"
+  IFS=$'\t' read -r wid name wx wy ww wh <<<"$info"
+
+  case "$sub" in
+    bounds)
+      jq -n --arg name "$name" --argjson id "$wid" --argjson x "$wx" --argjson y "$wy" --argjson width "$ww" --argjson height "$wh" \
+        '{id:$id,name:$name,x:$x,y:$y,width:$width,height:$height}'
+      ;;
+    screenshot)
+      [ -n "$out" ] || die "ui screenshot: --out FILE required"
+      screencapture -x -l"$wid" "$out"
+      echo "→ wrote $out"
+      ;;
+    click)
+      [ -n "$x" ] || die "ui click: --x required"
+      [ -n "$y" ] || die "ui click: --y required"
+      local ax="$x" ay="$y"
+      if [ $absolute -eq 0 ]; then
+        ax=$((wx + x))
+        ay=$((wy + y))
+      fi
+      ui_click_at "$ax" "$ay" "$double"
+      echo "→ clicked ${ax},${ay}"
+      ;;
+    ocr-find|ocr-click)
+      [ -n "$text" ] || die "ui $sub: --text required"
+      local tmp_png
+      tmp_png="$(mktemp /tmp/figx-ui-ocr-XXXXXX.png)"
+      screencapture -x -l"$wid" "$tmp_png"
+      local match_json
+      if ! match_json="$(swift - "$tmp_png" "$text" <<'SWIFT'
+import AppKit
+import Vision
+import Foundation
+
+let imagePath = CommandLine.arguments[1]
+let target = CommandLine.arguments[2].lowercased()
+let url = URL(fileURLWithPath: imagePath)
+
+let request = VNRecognizeTextRequest()
+request.recognitionLevel = .accurate
+request.usesLanguageCorrection = true
+request.recognitionLanguages = ["ko-KR", "en-US"]
+
+let handler = VNImageRequestHandler(url: url, options: [:])
+try handler.perform([request])
+
+guard let results = request.results as? [VNRecognizedTextObservation] else {
+    print("[]")
+    exit(0)
+}
+
+let image = NSImage(contentsOf: url)!
+let imageSize = image.size
+var hits: [[String: Any]] = []
+
+for obs in results {
+    guard let candidate = obs.topCandidates(1).first else { continue }
+    let txt = candidate.string.trimmingCharacters(in: .whitespacesAndNewlines)
+    if txt.isEmpty { continue }
+    if txt.lowercased().contains(target) {
+        let bb = obs.boundingBox
+        let left = bb.origin.x * imageSize.width
+        let top = (1.0 - (bb.origin.y + bb.size.height)) * imageSize.height
+        let width = bb.size.width * imageSize.width
+        let height = bb.size.height * imageSize.height
+        hits.append([
+            "text": txt,
+            "left": Int(left),
+            "top": Int(top),
+            "width": Int(width),
+            "height": Int(height)
+        ])
+    }
+}
+
+let data = try JSONSerialization.data(withJSONObject: hits, options: [])
+print(String(data: data, encoding: .utf8)!)
+SWIFT
+      )"; then
+        rm -f "$tmp_png"
+        die "ui $sub: OCR failed"
+      fi
+      local dims
+      dims="$(python3 - "$tmp_png" <<'PY'
+from PIL import Image
+import sys
+img = Image.open(sys.argv[1])
+print(f"{img.size[0]}\t{img.size[1]}")
+PY
+      )"
+      local imgw imgh
+      IFS=$'\t' read -r imgw imgh <<<"$dims"
+      if [ "$sub" = "ocr-find" ]; then
+        rm -f "$tmp_png"
+        echo "$match_json" | jq .
+      else
+        local match
+        if ! match="$(echo "$match_json" | jq -r --argjson nth "$nth" '
+          .[($nth - 1)] | select(.) | "\(.left)\t\(.top)\t\(.width)\t\(.height)\t\(.text)"
+        ')"; then
+          rm -f "$tmp_png"
+          die "ui ocr-click: text '$text' not found in current window"
+        fi
+        [ -n "$match" ] || { rm -f "$tmp_png"; die "ui ocr-click: text '$text' not found in current window"; }
+        local left top width height matched_text
+        IFS=$'\t' read -r left top width height matched_text <<<"$match"
+        rm -f "$tmp_png"
+        local ax ay
+        ax="$(python3 - <<PY
+wx = $wx
+ww = $ww
+left = $left
+width = $width
+imgw = $imgw
+dx = $dx
+print(round(wx + ((left + width / 2.0) * (ww / imgw)) + dx))
+PY
+        )"
+        ay="$(python3 - <<PY
+wy = $wy
+hh = $wh
+top = $top
+height = $height
+imgh = $imgh
+dy = $dy
+print(round(wy + ((top + height / 2.0) * (hh / imgh)) + dy))
+PY
+        )"
+        ui_click_at "$ax" "$ay" "$double"
+        echo "→ OCR clicked '${matched_text}' at ${ax},${ay} (offset ${dx},${dy})"
+      fi
+      ;;
+    *)
+      die "ui: unknown subcommand '$sub' (bounds|screenshot|click|ocr-find|ocr-click)"
+      ;;
+  esac
+}
+
 cmd_auth() {
   local sub="${1:-status}"; shift || true
   case "$sub" in
@@ -264,9 +525,15 @@ cmd_files() {
 }
 
 files_open() {
-  # Launch Figma Desktop to a specific file, then run figx plugin open
-  # so the agent side is connected without any manual clicking.
+  # Open a file from the Figma workspace/home surface by default, then run
+  # figx plugin open. Deep-linking with figma://file can land on the wrong
+  # surface for team/project workflows, so it is opt-in via --direct.
   # Accepts either a raw file-key or a full figma.com URL.
+  local direct=0
+  if [ "${1:-}" = "--direct" ]; then
+    direct=1
+    shift
+  fi
   local arg="${1:-}"
   local key
   if [ -z "$arg" ]; then
@@ -277,9 +544,43 @@ files_open() {
     key="$arg"
   fi
   [ -n "$key" ] || die "no file key — pass <key|url> or run 'figx files set <key>'"
-  echo "→ opening file $key in Figma Desktop"
-  open "figma://file/$key"
-  sleep 3
+  local open_query
+  open_query="$(project_config_get figma_open_query 2>/dev/null || project_config_get figma_file_name 2>/dev/null || true)"
+  if [ $direct -eq 1 ] || [ -z "$open_query" ]; then
+    echo "→ opening file $key via direct figma://file link"
+    open "figma://file/$key"
+    sleep 3
+  else
+    if ! pgrep -x Figma >/dev/null 2>&1; then
+      open -a Figma
+      sleep 2
+    fi
+    echo "→ opening '$open_query' from the workspace browser"
+    FIGX_OPEN_QUERY_EXPORT="$open_query" osascript <<'APPLESCRIPT' >/dev/null 2>&1 || true
+set openQuery to system attribute "FIGX_OPEN_QUERY_EXPORT"
+
+tell application "Figma" to activate
+delay 0.4
+
+tell application "System Events"
+  tell process "Figma"
+    keystroke "f" using {command down}
+    delay 0.4
+    keystroke openQuery
+    delay 0.6
+    key code 36
+    delay 1.5
+  end tell
+end tell
+APPLESCRIPT
+  fi
+  if [ -n "$open_query" ]; then
+    if wait_for_file_surface_ready "$open_query"; then
+      echo "✓ file surface ready: $open_query"
+    else
+      echo "○ file surface not fully ready yet — attempting plugin launch anyway"
+    fi
+  fi
   plugin_open
   hermes_notify "figx: opened file $key + plugin dispatched" || true
 }
@@ -382,6 +683,43 @@ tell application "System Events"
   end tell
 end tell
 APPLESCRIPT
+}
+
+wait_for_file_surface_ready() {
+  local file_name="${1:-}"
+  [ -n "$file_name" ] || return 1
+  local tries=0
+  while [ $tries -lt 20 ]; do
+    if FIGX_FILE_NAME_EXPORT="$file_name" osascript <<'APPLESCRIPT' >/dev/null 2>&1
+set fileName to system attribute "FIGX_FILE_NAME_EXPORT"
+set pluginMenuNames to {"Plugins", "플러그인", "プラグイン", "插件", "Plugins & widgets"}
+
+tell application "System Events"
+  tell process "Figma"
+    set topNames to name of every menu bar item of menu bar 1
+    set winNames to name of every window
+    set fileSeen to false
+    repeat with w in winNames
+      if (w as text) contains fileName then
+        set fileSeen to true
+        exit repeat
+      end if
+    end repeat
+    if fileSeen is false then error "file window not yet visible"
+    repeat with cand in pluginMenuNames
+      if topNames contains (cand as text) then return
+    end repeat
+    error "plugins menu not yet visible"
+  end tell
+end tell
+APPLESCRIPT
+    then
+      return 0
+    fi
+    sleep 0.5
+    tries=$((tries + 1))
+  done
+  return 1
 }
 
 team_autodetect() {
@@ -773,6 +1111,7 @@ name = "$(basename "$root")"
 tokens_src = "pdp_pipeline/make_pdp.py"
 tokens_out = "design-tokens"
 # figma_file_key = "XXXX"
+# figma_open_query = "AMPLE-N"
 # export_section_name = "AMPLEN · 16 PDP Layouts"
 # export_frame_ids = "13:2,13:3,..."
 # hermes_webhook = "figma-tokens"
@@ -1035,6 +1374,7 @@ main() {
     version|-v|--version) cmd_version ;;
     doctor)   cmd_doctor ;;
     permissions|perms) cmd_permissions ;;
+    ui)       cmd_ui "$@" ;;
     figma-update|app-update) figma_update ;;
     project)
       local sub="${1:-find}"; shift || true
