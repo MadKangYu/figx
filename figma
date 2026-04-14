@@ -29,6 +29,9 @@
 #   permissions                       # macOS privacy permission audit
 #   images prep <dir> [--out <d>]     # HEIC→JPG, downscale >4096px, re-encode
 #                                     # for clean Finder→Figma drag-and-drop
+#   images place <dir>                # open Figma's official Place image dialog
+#                                     # and load every image in <dir> into the
+#                                     # placement cursor (Shift+Cmd+K flow)
 #   find <query> | --brand .. --category .. --subject ..
 #                                     # locate assets via Spotlight (+find fallback),
 #                                     # filter by 7-segment filename convention
@@ -987,7 +990,8 @@ main() {
       local sub="${1:-prep}"; shift || true
       case "$sub" in
         prep) "$FIGMA_CLI_ROOT/tools/image-prep.sh" "$@" ;;
-        *) die "images: unknown subcommand '$sub' (prep)" ;;
+        place) "$FIGMA_CLI_ROOT/tools/image-place.sh" "$@" ;;
+        *) die "images: unknown subcommand '$sub' (prep|place)" ;;
       esac
       ;;
     assets)
